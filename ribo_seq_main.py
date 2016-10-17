@@ -11,7 +11,7 @@ import subprocess
 import ribo_settings
 import ribo_utils
 import ribo_lib
-import ms_qc
+import ribo_qc
 import ms_plotting
 from collections import defaultdict
 import numpy as np
@@ -23,7 +23,7 @@ class experiment:
         self.settings = settings
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.remove_adaptor()
-        #self.map_reads()
+        self.map_reads()
         #self.initialize_libs()
 
     def initialize_libs(self):
@@ -124,7 +124,6 @@ class experiment:
             threads,
             lib_settings.get_fastq_gz_file(),
             lib_settings.get_log(), lib_settings.get_log())
-        print command_to_run
         subprocess.Popen(command_to_run, shell=True).wait()
         subprocess.Popen('gzip %s-trimmed.fastq' % (lib_settings.get_trimmed_reads(prefix_only=True)), shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
@@ -145,30 +144,34 @@ class experiment:
         ribo_utils.make_dir(self.rdir_path('mapped_reads'))
         ribo_utils.make_dir(self.rdir_path('mapping_stats'))
         ribo_utils.make_dir(self.rdir_path('unmapped_reads'))
-        threads = max(1, self.threads / len(self.settings.iter_lib_settings()))
+        threads = max(1, self.threads / self.num_libs)
         ribo_utils.parmap(lambda lib_setting: self.map_one_library(lib_setting, threads), self.settings.iter_lib_settings(),
                        nprocs = self.threads)
         self.settings.write_to_log( 'finished mapping reads')
 
     def map_one_library(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
-        subprocess.Popen('bowtie2 -q --very-sensitive-local --norc --no-mixed --no-overlap --no-discordant -t -x %s -p %d -1 %s -2 %s --un-conc-gz %s -S %s 1>> %s 2>>%s' % (self.settings.get_bowtie_index(), self.threads,
-                                                                                                   lib_settings.get_adaptor_trimmed_reads()[0], lib_settings.get_adaptor_trimmed_reads()[1], lib_settings.get_unmappable_reads_prefix(), lib_settings.get_mapped_reads_sam(),
-                                                                                                                      lib_settings.get_log(), lib_settings.get_pool_mapping_stats()), shell=True).wait()
+        command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
+                         '--outSAMtype BAM SortedByCoordinate --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                         '--quantMode TranscriptomeSAM 1>>%s 2>>%s' %\
+                         (threads, self.settings.get_star_genome_dir(), lib_settings.get_trimmed_reads(),
+                          lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
+
+        subprocess.Popen(command_to_run, shell=True).wait()
         #subprocess.Popen('samtools view -b -h -o %s %s 1>> %s 2>> %s' % (lib_settings.get_mapped_reads(), lib_settings.get_mapped_reads_sam(), lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
         #also, sort bam file, and make an index
 
         #samtools view -uS myfile.sam | samtools sort - myfile.sorted
-        subprocess.Popen('samtools view -uS %s | samtools sort - %s.temp_sorted 1>>%s 2>>%s' % (lib_settings.get_mapped_reads_sam(), lib_settings.get_mapped_reads_sam(),
-                                                                          lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
+        #subprocess.Popen('samtools view -uS %s | samtools sort - %s.temp_sorted 1>>%s 2>>%s' % (lib_settings.get_mapped_reads_sam(), lib_settings.get_mapped_reads_sam(),
+        #                                                                  lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
 
 
         #subprocess.Popen('samtools sort %s %s.temp_sorted 1>>%s 2>>%s' % (lib_settings.get_mapped_reads_sam(), lib_settings.get_mapped_reads_sam(),
         #                                                                  lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
-        subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_mapped_reads_sam(),
-                                                                          lib_settings.get_mapped_reads()), shell = True).wait()
-        subprocess.Popen('samtools index %s' % (lib_settings.get_mapped_reads()), shell = True).wait()
-        subprocess.Popen('rm %s' % (lib_settings.get_mapped_reads_sam()), shell = True).wait()
+        #subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_mapped_reads_sam(),
+        #                                                                  lib_settings.get_mapped_reads()), shell = True).wait()
+        #subprocess.Popen('samtools index %s' % (lib_settings.get_mapped_reads()), shell = True).wait()
+        #subprocess.Popen('rm %s' % (lib_settings.get_mapped_reads_sam()), shell = True).wait()
         lib_settings.write_to_log('mapping_reads done')
 
     def rdir_path(self, *args):
@@ -185,7 +188,7 @@ class experiment:
         return ribo_utils.aopen(out_path, 'w')
 
     def perform_qc(self):
-        qc_engine = ms_qc.ms_qc(self, self.settings, self.threads)
+        qc_engine = ribo_qc.ribo_qc(self, self.settings, self.threads)
         qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
         qc_engine.print_library_count_concordances()
         qc_engine.plot_average_read_positions()

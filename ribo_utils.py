@@ -68,9 +68,9 @@ def unPickle(fileName):
     f.close()
     return o
 
-def makePickle(o, fileName):
+def makePickle(o, fileName, protocol=pickle.HIGHEST_PROTOCOL):
     f = open(fileName, 'w')
-    pickle.dump(o, f)
+    pickle.dump(o, f, protocol=protocol)
     f.close()
 
 

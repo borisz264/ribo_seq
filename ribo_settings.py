@@ -46,7 +46,7 @@ class ribo_settings:
         int_keys = ['comparison_read_cutoff', 'min_insert_length', 'max_insert_length',
                      'quality_cutoff']
         #float_keys = []
-        str_keys = ['adaptor_3p_sequence', 'star_genome_index_folder']
+        str_keys = ['adaptor_3p_sequence', 'star_genome_dir']
         boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor', 'make_interactive_plots']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
@@ -120,11 +120,9 @@ class ribo_settings:
         index = index = self.get_property('rrna_index')
         return index
 
-    def get_genome_bowtie_index(self):
-        index = self.get_property('genome_index')
+    def get_star_genome_dir(self):
+        index = self.get_property('star_genome_dir')
         return index
-    def bowtie_index_exists(self):
-        return ribo_utils.file_exists(self.get_bowtie_index() + '.1.bt2')
 
     def get_log(self):
         log = os.path.join(
@@ -195,35 +193,13 @@ class ribo_lib_settings:
         pool_mapping_stats = os.path.join(self.experiment_settings.get_rdir(), 'mapping_stats', '%(sample_name)s.pool.txt' % {'sample_name': self.sample_name})
         return pool_mapping_stats
 
+    def get_mapped_reads_prefix(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s' % {'sample_name': self.sample_name})
+        return mapped_reads
+
     def get_mapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s.bam' % {'sample_name': self.sample_name})
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
         return mapped_reads
-
-    def get_mapped_reads_sam(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s.sam' % {'sample_name': self.sample_name})
-        return mapped_reads
-
-    def get_unmappable_reads_prefix(self):
-        unmapped_reads = os.path.join(
-          self.experiment_settings.get_rdir(),
-          'unmapped_reads',
-          '%(sample_name)s.unmappable.fastq.gz' %
-           {'sample_name': self.sample_name})
-        return unmapped_reads
-
-    def get_unmappable_reads(self):
-        unmapped_reads_1 = os.path.join(
-          self.experiment_settings.get_rdir(),
-          'unmapped_reads',
-          '%(sample_name)s.unmappable.fastq.1.gz' %
-           {'sample_name': self.sample_name})
-        unmapped_reads_2 = os.path.join(
-          self.experiment_settings.get_rdir(),
-          'unmapped_reads',
-          '%(sample_name)s.unmappable.fastq.1.gz' %
-           {'sample_name': self.sample_name})
-        return unmapped_reads_1, unmapped_reads_2
-
 
     def get_trimmed_reads(self, prefix_only = False):
         if prefix_only:
