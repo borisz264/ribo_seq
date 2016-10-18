@@ -10,16 +10,15 @@ def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
     lib_settings.write_to_log('counting reads or loading counts')
     if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
         print "counting BAM reads"
-        pool_sequence_mappings = {}
-        trimmed_sequences = ribo_utils.convertFastaToDict(experiment_settings.get_trimmed_pool_fasta())
-        samfile = pysam.Samfile(lib_settings.get_genome_mapped_reads(), "rb")
-        for sequence_name in trimmed_sequences:
-            pool_sequence_mappings[sequence_name] = pool_sequence_mapping(sequence_name,
-                                                                               trimmed_sequences[sequence_name],
-                                                                               samfile)
+        transcripts = {}
+        tx_annotations = ribo_utils.tsv_to_dict(experiment_settings.get_property('canonical_tx_features'))
+        tx_seqs = ribo_utils.convertFastaToDict(experiment_settings.get_property('canonical_tx_seqs'))
+        samfile = pysam.AlignmentFile(lib_settings.get_transcript_mapped_reads(), "rb")
+        for tx_id in tx_annotations:
+            transcripts[tx_id] = transcript(tx_id, tx_annotations[tx_id], tx_seqs[tx_id])
 
         samfile.close()
-        ribo_utils.makePickle(pool_sequence_mappings, lib_settings.get_sequence_counts())
+        ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
     lib_settings.write_to_log('done counting reads or loading counts')
 
 
@@ -35,7 +34,7 @@ class ribo_lib:
         self.get_wdir = experiment_settings.get_wdir
 
         print "unpickling %s counts" % lib_settings.sample_name
-        self.pool_sequence_mappings = ribo_utils.unPickle(self.lib_settings.get_sequence_counts())
+        self.pool_sequence_mappings = ribo_utils.unPickle(self.lib_settings.get_transcript_counts())
         #this summing has to happen after library initialization and unpickling
         self.total_mapped_fragments = sum([mapping.fragment_count for mapping in self.pool_sequence_mappings.values()])
         self.log_mapping_tags()
@@ -123,11 +122,11 @@ class ribo_lib:
         self.lib_settings.write_to_log('PE mapping tags- %s' % (', '.join(['%s:%d' % (tag, aggregate_dict[tag]) for
                                                                            tag in aggregate_dict])))
 
-class pool_sequence_mapping:
+class transcript:
     """
-    Represents a single sequence from the input pool
+    Represents a single transcript from the genome
     Stores
-        The original RNA sequence used in the pool (No adaptor)
+        The transcript sequence
         The Trimmed sequence used for mapping
         The positions of all reads mapping to this sequence
         Total number of reads mapping to this sequence

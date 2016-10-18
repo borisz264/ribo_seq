@@ -46,11 +46,11 @@ class ribo_settings:
         int_keys = ['comparison_read_cutoff', 'min_insert_length', 'max_insert_length',
                      'quality_cutoff']
         #float_keys = []
-        str_keys = ['adaptor_3p_sequence', 'star_genome_dir']
+        str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'canonical_tx_features', 'canonical_tx_seqs']
         boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor', 'make_interactive_plots']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
-        #extant_files = ['pool_fasta',]
+        extant_files = ['canonical_tx_features', 'canonical_tx_seqs']
         config = ConfigParser.ConfigParser()
         config.read(settings_file)
         settings = {}
@@ -82,8 +82,8 @@ class ribo_settings:
         self.fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file) for fastq_gz_file in self.fastq_gz_files]
         for file_handle in self.fastq_gz_file_handles:
             assert ribo_utils.file_exists(file_handle)
-        #for k in extant_files:
-        #    assert ribo_utils.file_exists(settings[k])
+        for k in extant_files:
+            assert ribo_utils.file_exists(settings[k])
         self.settings = settings
         self.rdir = settings['results_dir']
         ribo_utils.make_dir(self.rdir)
@@ -139,11 +139,7 @@ class ribo_settings:
         else:
             f.write(text)
         f.close()
-    def get_trimmed_pool_fasta(self):
-        log = os.path.join(
-          self.get_rdir(),
-          'trimmed_pool_seqs.fasta')
-        return log
+
     def get_overall_mapping_summary(self):
         summary_file = os.path.join(
           self.get_rdir(),
@@ -231,10 +227,10 @@ class ribo_lib_settings:
            {'sample_name': self.sample_name})
         return trimming_log
 
-    def get_sequence_counts(self):
+    def get_transcript_counts(self):
         sequence_counts = os.path.join(
           self.experiment_settings.get_rdir(),
-          'sequence_counts',
+          'transcript_counts',
           '%(sample_name)s.counts.pkl' %
            {'sample_name': self.sample_name})
         return sequence_counts
@@ -260,5 +256,5 @@ class ribo_lib_settings:
         return ribo_utils.file_exists(mapped_reads)
 
     def sequence_counts_exist(self):
-        sequence_counts = self.get_sequence_counts()
+        sequence_counts = self.get_transcript_counts()
         return ribo_utils.file_exists(sequence_counts)

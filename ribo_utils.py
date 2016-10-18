@@ -97,6 +97,25 @@ def file_exists(fname):
         raise ValueError('Input File %s cannot be read' % fname)
     return True
 
+def tsv_to_dict(filename, header = True, delimiter = '\t', key_column = 0, convert_to_float = False):
+    """
+    Will return a dict index first by the row labels, then by the column headers
+    """
+    return_dict = {}
+    f = open(filename)
+    lines  = f.readlines()
+    headers = lines[0].strip('\n').split(delimiter)
+    for line in lines[1:]:
+        ll= line.strip('\n').split(delimiter)
+        return_dict[ll[key_column]] = {}
+        for i in range(0, len(ll)):
+            if not i == key_column:
+                if not convert_to_float:
+                    return_dict[ll[key_column]][headers[i]]=ll[i]
+                elif is_float(ll[i]):
+                    return_dict[ll[key_column]][headers[i]]=float(ll[i])
+    f.close()
+    return return_dict
 
 ##########
 #MATH

@@ -28,7 +28,7 @@ class experiment:
 
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')
-        ribo_utils.make_dir(self.rdir_path('sequence_counts'))
+        ribo_utils.make_dir(self.rdir_path('transcript_counts'))
         self.libs = []
 
         ribo_utils.parmap(lambda lib_settings: ribo_lib.initialize_pool_sequence_mappings(self.settings, lib_settings),
