@@ -197,8 +197,12 @@ class ribo_lib_settings:
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s' % {'sample_name': self.sample_name})
         return mapped_reads
 
-    def get_mapped_reads(self):
+    def get_genome_mapped_reads(self):
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
+        return mapped_reads
+
+    def get_transcript_mapped_reads(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.toTranscriptome.out.bam' % {'sample_name': self.sample_name})
         return mapped_reads
 
     def get_trimmed_reads(self, prefix_only = False):
@@ -252,7 +256,7 @@ class ribo_lib_settings:
         return ribo_utils.file_exists(trimmed_reads)
 
     def mapped_reads_exist(self):
-        mapped_reads = self.get_mapped_reads()
+        mapped_reads = self.get_genome_mapped_reads()
         return ribo_utils.file_exists(mapped_reads)
 
     def sequence_counts_exist(self):

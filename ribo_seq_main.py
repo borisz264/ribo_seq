@@ -142,8 +142,6 @@ class experiment:
             else:
                 return
         ribo_utils.make_dir(self.rdir_path('mapped_reads'))
-        ribo_utils.make_dir(self.rdir_path('mapping_stats'))
-        ribo_utils.make_dir(self.rdir_path('unmapped_reads'))
         threads = max(1, self.threads / self.num_libs)
         ribo_utils.parmap(lambda lib_setting: self.map_one_library(lib_setting, threads), self.settings.iter_lib_settings(),
                        nprocs = self.threads)
@@ -153,25 +151,18 @@ class experiment:
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
                          '--outSAMtype BAM SortedByCoordinate --outWigType wiggle read1_5p --outFileNamePrefix %s' \
-                         '--quantMode TranscriptomeSAM 1>>%s 2>>%s' %\
+                         ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(), lib_settings.get_trimmed_reads(),
                           lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
 
         subprocess.Popen(command_to_run, shell=True).wait()
-        #subprocess.Popen('samtools view -b -h -o %s %s 1>> %s 2>> %s' % (lib_settings.get_mapped_reads(), lib_settings.get_mapped_reads_sam(), lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
-        #also, sort bam file, and make an index
+        #sort transcript-mapped bam file
 
-        #samtools view -uS myfile.sam | samtools sort - myfile.sorted
-        #subprocess.Popen('samtools view -uS %s | samtools sort - %s.temp_sorted 1>>%s 2>>%s' % (lib_settings.get_mapped_reads_sam(), lib_settings.get_mapped_reads_sam(),
-        #                                                                  lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
-
-
-        #subprocess.Popen('samtools sort %s %s.temp_sorted 1>>%s 2>>%s' % (lib_settings.get_mapped_reads_sam(), lib_settings.get_mapped_reads_sam(),
-        #                                                                  lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
-        #subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_mapped_reads_sam(),
-        #                                                                  lib_settings.get_mapped_reads()), shell = True).wait()
-        #subprocess.Popen('samtools index %s' % (lib_settings.get_mapped_reads()), shell = True).wait()
-        #subprocess.Popen('rm %s' % (lib_settings.get_mapped_reads_sam()), shell = True).wait()
+        subprocess.Popen('samtools sort %s %s.temp_sorted 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
+                                                                          lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
+        subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
+                                                                          lib_settings.get_transcript_mapped_reads()), shell = True).wait()
+        #subprocess.Popen('samtools index %s' % (lib_settings.get_transcript_mapped_reads()), shell = True).wait()
         lib_settings.write_to_log('mapping_reads done')
 
     def rdir_path(self, *args):

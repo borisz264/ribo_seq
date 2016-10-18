@@ -12,7 +12,7 @@ def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
         print "counting BAM reads"
         pool_sequence_mappings = {}
         trimmed_sequences = ribo_utils.convertFastaToDict(experiment_settings.get_trimmed_pool_fasta())
-        samfile = pysam.Samfile(lib_settings.get_mapped_reads(), "rb")
+        samfile = pysam.Samfile(lib_settings.get_genome_mapped_reads(), "rb")
         for sequence_name in trimmed_sequences:
             pool_sequence_mappings[sequence_name] = pool_sequence_mapping(sequence_name,
                                                                                trimmed_sequences[sequence_name],
