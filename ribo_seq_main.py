@@ -24,7 +24,7 @@ class experiment:
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.remove_adaptor()
         self.map_reads()
-        #self.initialize_libs()
+        self.initialize_libs()
 
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')
@@ -35,14 +35,6 @@ class experiment:
                         self.settings.iter_lib_settings(), nprocs=self.threads)
         map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
         self.settings.write_to_log('initializing libraries, counting reads, done')
-        self.monosome_libs = [self.find_lib_by_sample_name(sample_name) for
-                              sample_name in self.settings.get_property('monosome_libraries')]
-        self.mrnp_libs = [self.find_lib_by_sample_name(sample_name) for
-                              sample_name in self.settings.get_property('mrnp_libraries')]
-        self.total_libs = [self.find_lib_by_sample_name(sample_name) for
-                          sample_name in self.settings.get_property('total_libraries')]
-        self.input_libs = [self.find_lib_by_sample_name(sample_name) for
-                           sample_name in self.settings.get_property('total_libraries')]
 
 
     def find_lib_by_sample_name(self, sample_name):
@@ -55,12 +47,6 @@ class experiment:
     def initialize_lib(self, lib_settings):
         lib = ribo_lib.ribo_lib(self.settings, lib_settings)
         self.libs.append(lib)
-
-    def needs_calculation(self, lib_settings, count_type, k):
-        if self.settings.get_force_recount(count_type):
-            return True
-        return not lib_settings.counts_exist(count_type, k)
-
 
     def make_tables(self):
         ribo_utils.make_dir(self.rdir_path('tables'))
