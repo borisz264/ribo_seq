@@ -12,7 +12,7 @@ import ribo_settings
 import ribo_utils
 import ribo_lib
 import ribo_qc
-import ms_plotting
+import ribo_plotting
 from collections import defaultdict
 import numpy as np
 import scipy.stats as stats
@@ -31,8 +31,8 @@ class experiment:
         ribo_utils.make_dir(self.rdir_path('transcript_counts'))
         self.libs = []
 
-        ribo_utils.parmap(lambda lib_settings: ribo_lib.initialize_pool_sequence_mappings(self.settings, lib_settings),
-                        self.settings.iter_lib_settings(), nprocs=self.threads)
+        ribo_utils.parmap(lambda lib_settings: ribo_lib.assign_tx_reads(self.settings, lib_settings),
+                          self.settings.iter_lib_settings(), nprocs=self.threads)
         map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
         self.settings.write_to_log('initializing libraries, counting reads, done')
 
@@ -56,25 +56,36 @@ class experiment:
     def make_plots(self):
         ribo_utils.make_dir(self.rdir_path('plots'))
 
-        ms_plotting.all_library_rpm_scatter(self)
-        ms_plotting.monosome_over_mrnp_reproducibility(self)
-        ms_plotting.monosome_over_total_reproducibility(self)
-        ms_plotting.monosome_over_mrnp_plus_monosome_reproducibility(self)
-        for anno_filename in self.settings.get_property('matched_set_annotations'):
-            ms_plotting.plot_recruitment_violins(self, anno_filename,
-                                                 read_cutoff=self.settings.get_property('comparison_read_cutoff'))
-            ms_plotting.recruitment_change_rank_value_plot_static(self, anno_filename,
-                                                 read_cutoff=self.settings.get_property('comparison_read_cutoff'))
-            ms_plotting.reverse_recruitment_change_rank_value_plot_static(self, anno_filename,
-                                                 read_cutoff=self.settings.get_property('comparison_read_cutoff'))
+        ribo_plotting.plot_start_codon_average(self, up=100, down=100, min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
+                                               read_end='3p', read_lengths='all')
+        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                               read_end='3p', read_lengths='all')
+        ribo_plotting.plot_start_codon_average(self, up=100, down=100,
+                                               min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
+                                               read_end='3p', read_lengths=[29, 30])
+        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                          read_end='3p', read_lengths=[29, 30])
 
-            if self.settings.get_property('make_interactive_plots'):
-                ms_plotting.recruitment_change_rank_value_plot_interactive(self, anno_filename,
-                                                                           read_cutoff=self.settings.get_property('comparison_read_cutoff'))
+        ribo_plotting.plot_start_codon_average(self, up=100, down=100,
+                                               min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
+                                               read_end='5p', read_lengths='all')
+        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                              read_end='5p', read_lengths='all')
+        ribo_plotting.plot_start_codon_average(self, up=100, down=100,
+                                               min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
+                                               read_end='5p', read_lengths=[29, 30])
+        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                              read_end='5p', read_lengths=[29, 30])
+        ribo_plotting.plot_fragment_length_distributions(self)
+        ribo_plotting.plot_frame_distributions(self)
 
-                ms_plotting.recruitment_fold_change_rank_value_plot_interactive(self, anno_filename,
-                                                                               read_cutoff=self.settings.get_property(
-                                                                                   'comparison_read_cutoff'))
+        ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
+        ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
+        ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
+        ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
+        ribo_plotting.plot_readthrough_box(self)
+
+
 
     def remove_adaptor(self):
         self.settings.write_to_log('trimming adaptors')
@@ -86,10 +97,9 @@ class experiment:
                 return
 
         if self.settings.get_property('trim_adaptor'):
-            threads= max(1, self.threads/self.num_libs)
             ribo_utils.make_dir(self.rdir_path('trimmed_reads'))
-            ribo_utils.parmap(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, threads),
-                              self.settings.iter_lib_settings(), nprocs = self.threads)
+            map(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads),
+                              self.settings.iter_lib_settings())
         self.settings.write_to_log('done trimming adaptors')
 
     def remove_adaptor_one_lib(self, lib_settings, threads):
@@ -128,9 +138,7 @@ class experiment:
             else:
                 return
         ribo_utils.make_dir(self.rdir_path('mapped_reads'))
-        threads = max(1, self.threads / self.num_libs)
-        ribo_utils.parmap(lambda lib_setting: self.map_one_library(lib_setting, threads), self.settings.iter_lib_settings(),
-                       nprocs = self.threads)
+        map(lambda lib_setting: self.map_one_library(lib_setting, self.threads), self.settings.iter_lib_settings())
         self.settings.write_to_log( 'finished mapping reads')
 
     def map_one_library(self, lib_settings, threads):
@@ -148,7 +156,8 @@ class experiment:
                                                                           lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
         subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
                                                                           lib_settings.get_transcript_mapped_reads()), shell = True).wait()
-        #subprocess.Popen('samtools index %s' % (lib_settings.get_transcript_mapped_reads()), shell = True).wait()
+
+        subprocess.Popen('samtools index %s' % (lib_settings.get_transcript_mapped_reads()), shell = True).wait()
         lib_settings.write_to_log('mapping_reads done')
 
     def rdir_path(self, *args):

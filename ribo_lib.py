@@ -5,8 +5,9 @@ import pysam
 import ribo_utils
 import numpy as np
 import sys
+import math
 
-def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
+def assign_tx_reads(experiment_settings, lib_settings):
     lib_settings.write_to_log('counting reads or loading counts')
     if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
         print "counting BAM reads"
@@ -14,7 +15,7 @@ def initialize_pool_sequence_mappings(experiment_settings, lib_settings):
         tx_annotations = ribo_utils.tsv_to_dict(experiment_settings.get_property('canonical_tx_features'))
         tx_seqs = ribo_utils.convertFastaToDict(experiment_settings.get_property('canonical_tx_seqs'))
         samfile = pysam.AlignmentFile(lib_settings.get_transcript_mapped_reads(), "rb")
-        for tx_id in tx_annotations:
+        for tx_id in [t for t in samfile.references if t in tx_annotations and t in tx_seqs]:
             transcripts[tx_id] = transcript(tx_id, tx_annotations[tx_id], tx_seqs[tx_id], samfile)
         samfile.close()
         ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
@@ -36,7 +37,8 @@ class ribo_lib:
         self.transcripts = ribo_utils.unPickle(self.lib_settings.get_transcript_counts())
         #this summing has to happen after library initialization and unpickling
         self.total_mapped_fragments = sum([transcript.fragment_count for transcript in self.transcripts.values()])
-        self.log_mapping_tags()
+        self.total_mapped_counts = {}  # maps a set of parameters to the total number of read counts under those parameters
+
 
     def name_sorted_counts(self):
         #returns counts for each sequence in pool, sorted by their sequence names, alphabetically
@@ -83,22 +85,48 @@ class ribo_lib:
     def get_fragment_count_distribution(self):
         return [self.transcripts[sequence].fragment_count for sequence in self.transcripts]
 
-    def get_rpm(self, sequence_name):
-        return (10**6)*self.transcripts(sequence_name).fragment_count/float(self.total_mapped_fragments)
+    def get_total_tx_reads(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        parameter_string = 'tx_%d_%d_%s_%s' %(start_offset, stop_offset, read_end, str(read_lengths))
+        if parameter_string not in self.total_mapped_counts:
+            self.total_mapped_counts[parameter_string] = sum([tx.get_tx_read_count(start_offset, stop_offset, read_end=read_end,
+                                                                                   read_lengths=read_lengths)
+                                                              for tx in self.transcripts.values()])
+        return  self.total_mapped_counts[parameter_string]
 
-    def get_rpkm(self, sequence_name):
-        pass
-        #TODO: implement RPKM computation
-        #return (10**6)*self.transcripts(sequence_name).fragment_count/float(self.total_mapped_fragments)
 
-    def log_mapping_tags(self):
-        "writes aggregate paired-end mapping tag data to log file as a sanity check"
-        aggregate_dict = defaultdict(int)
-        for pool_seq in self.transcripts.values():
-            for mapping_tag in pool_seq.paired_end_mapping_tags:
-                aggregate_dict[mapping_tag] += pool_seq.paired_end_mapping_tags[mapping_tag]
-        self.lib_settings.write_to_log('mapping tags- %s' % (', '.join(['%s:%d' % (tag, aggregate_dict[tag]) for
-                                                                           tag in aggregate_dict])))
+    def get_total_cds_reads(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        parameter_string = 'cds_%d_%d_%s_%s' % (start_offset, stop_offset, read_end, str(read_lengths))
+        if parameter_string not in self.total_mapped_counts:
+            self.total_mapped_counts[parameter_string] = sum(
+                [tx.get_cds_read_count(start_offset, stop_offset, read_end=read_end,
+                                      read_lengths=read_lengths)
+                 for tx in self.transcripts.values()])
+        return self.total_mapped_counts[parameter_string]
+
+    def get_rpm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        tx_counts = self.transcripts[sequence_name].get_tx_read_count(start_offset, stop_offset, read_end=read_end,
+                                                                      read_lengths=read_lengths)
+        total_counts = self.get_total_tx_reads(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
+
+        return (10 ** 6) * float(tx_counts) / float(total_counts)
+
+
+    def get_rpkm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        return self.get_rpm(sequence_name, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) /\
+               self.transcripts[sequence_name].tx_length
+
+
+    def get_cds_rpm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        cds_counts = self.transcripts[sequence_name].get_cds_read_count(start_offset, stop_offset, read_end=read_end,
+                                                                      read_lengths=read_lengths)
+
+        total_counts = self.get_total_cds_reads(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
+        return (10 ** 6) * float(cds_counts) / float(total_counts)
+
+
+    def get_cds_rpkm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        return self.get_cds_rpm(sequence_name, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) / \
+               self.transcripts[sequence_name].cds_length
 
 class transcript:
     """
@@ -113,42 +141,50 @@ class transcript:
 
     """
     def __init__(self, tx_id, tx_info, tx_seq, sam_file):
-        #TODO: collect info from tx_info
-        self.tx_length = None
-        self.exon_starts = []
-        self.exon_ends = []
-        self.cds_start = None
-        self.cds_end = None
+        self.strand = tx_info['strand']
+        self.tx_length = int(tx_info['tx_length'])
+        self.exon_starts = [int(start) for start in tx_info['exon_starts'].split(',')]
+        self.exon_ends = [int(end) for end in tx_info['tx_exon_ends'].split(',')]
+        self.cds_start = int(tx_info['cdsStart'])
+        self.cds_end = int(tx_info['cdsEnd'])
+        self.cds_length = self.cds_end-self.cds_start
+        self.trailer_length = self.tx_length-self.cds_end
+        self.leader_length =self.cds_start
+        assert self.trailer_length + self.cds_length + self.leader_length == self.tx_length
+        self.gene_id = tx_info['geneID']
+        self.notes = [note for note in tx_info['notes'].split(',')]
 
         self.sequence_name = tx_id
         self.full_sequence = tx_seq
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_5p_lengths_at_position = defaultdict(dict)  # will map position to a list of fragment lengths with 5' ends at that position
-        self.fragment_3p_lengths_at_position = defaultdict(dict)
+        self.fragment_3p_lengths_at_position = defaultdict(dict) # will map position to a list of fragment lengths with 3' ends at that position
         self.fragment_count = 0
-        self.length_dist = defaultdict(dict)
-
+        self.length_dist = defaultdict(int)
         self.assign_read_ends_from_sam(sam_file)
 
     def assign_read_ends_from_sam(self, sam_file):
         all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
-        for read in all_mapping_reads:
-            if read.is_read1:
-                #read1 should be on the forawrd strand since these are transcript-relative
-                #this alignment should be the primary one. IF this throws erros, I will need to write more logic.
-                assert (not read.is_reverse) and (not read.is_secondary)
-                fragment_start = read.reference_start #0-based start of fragment
-                fragment_length = read.template_length
-                fragment_end = fragment_start + fragment_length
-                self.fragment_5p_ends_at_position[fragment_start] += 1
-                self.fragment_3p_ends_at_position[fragment_end] += 1
-                self.fragment_count += 1
-                self.length_dist[fragment_length] += 1
-                if fragment_length not in self.fragment_5p_lengths_at_position[fragment_start]:
-                    self.fragment_5p_lengths_at_position[fragment_start][fragment_length]+=1
-                if fragment_length not in self.fragment_3p_lengths_at_position[fragment_start]:
-                    self.fragment_3p_lengths_at_position[fragment_end][fragment_length]+=1
+        for read in [r for r in all_mapping_reads if not r.is_secondary and not r.is_reverse]:
+            #this alignment should be the primary one. IF this throws erros, I will need to write more logic.
+            assert (not read.is_reverse) and (not read.is_secondary)
+            #and (not read.is_secondary)
+            fragment_start = read.reference_start #0-based start of fragment
+            # get read length from sequence, or CIGAR string if unavailable
+            fragment_length = read.infer_query_length(always=False)
+            assert fragment_length != 0
+            fragment_end = fragment_start + fragment_length
+            self.fragment_5p_ends_at_position[fragment_start] += 1
+            self.fragment_3p_ends_at_position[fragment_end] += 1
+            self.fragment_count += 1
+            self.length_dist[fragment_length] += 1
+            if fragment_length not in self.fragment_5p_lengths_at_position[fragment_start]:
+                self.fragment_5p_lengths_at_position[fragment_start][fragment_length] = 0
+            self.fragment_5p_lengths_at_position[fragment_start][fragment_length] += 1
+            if fragment_length not in self.fragment_3p_lengths_at_position[fragment_end]:
+                self.fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
+            self.fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
     def contains_subsequence(self, subsequence):
         if subsequence in self.full_sequence:
             return True
@@ -159,7 +195,12 @@ class transcript:
         #this regex will NOT return overlapping sequences
         return [m.start() for m in re.finditer(subsequence, self.full_sequence)]
 
-    def get_read_counts_array(self, relative_start, upstream, downstream, read_end = '5p', read_lengths = 'all'):
+    def get_read_end_positions(self, read_end = '5p', read_lengths = 'all'):
+        '''
+        :param read_end:
+        :param read_lengths:
+        :return:
+        '''
         if read_lengths == 'all':
             if read_end == '5p':
                 read_dict = self.fragment_5p_ends_at_position
@@ -179,9 +220,141 @@ class transcript:
                 print 'unidentified read end option', read_end
                 sys.exit()
             for position in super_dict:
-                read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths])
-        counts_array = [read_dict[position] if position in read_dict and position>=0 else 0
-                        for position in range(relative_start-upstream, relative_start+downstream+1)]
-        inclusion_array = [1 if position>=0 and position < self.tx_length else 0
-                        for position in range(relative_start-upstream, relative_start+downstream+1)]
-        return  counts_array, inclusion_array
+                read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths if read_length in super_dict[position]])
+        return read_dict
+
+    def get_positional_length_sums(self, read_end = '5p'):
+        '''
+        :param read_end:
+        :param read_lengths:
+        :return:
+        '''
+        lengths_dict = {}
+        if read_end == '5p':
+            super_dict = self.fragment_5p_lengths_at_position
+        elif read_end == '3p':
+            super_dict = self.fragment_3p_lengths_at_position
+        else:
+            print 'unidentified read end option', read_end
+            sys.exit()
+        for position in super_dict:
+            lengths_dict[position] = sum([super_dict[position][read_length]*read_length for read_length in
+                                          super_dict[position] if read_length in super_dict[position]])
+        return lengths_dict
+
+    def get_read_counts_array(self, anchor, left_offset, right_offset, read_end ='5p', read_lengths ='all'):
+        '''
+
+        :param anchor: the "reference" or "zero" position for the array. For example the CDS start or stop
+        :param left_offset: position relative to anchor to start the array, negative numbers will be upstream
+        :param right_offset: position relative to anchor to end the array, negative numbers will be upstream
+        :param read_end: '5p' or 3p', which end of reads to count.
+        :param read_lengths: read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :return:
+        counts_array: an array of the read counts over the window
+        inclusion_array: an array of 1 and zero to indicate which positions are within the transcript boundaries.
+        '''
+        assert right_offset > left_offset
+        read_dict = self.get_read_end_positions(read_end = read_end, read_lengths = read_lengths)
+        counts_array = np.array([read_dict[position] if position in read_dict and position>=0 else 0
+                        for position in range(anchor + left_offset, anchor + right_offset + 1)])
+        inclusion_array = np.array([1 if position>=0 and position < self.tx_length else 0
+                           for position in range(anchor + left_offset, anchor + right_offset + 1)])
+        assert len(counts_array) == len (inclusion_array)
+        return counts_array, inclusion_array
+
+    def get_avg_read_lengths_array(self, anchor, left_offset, right_offset, read_end ='5p'):
+        '''
+
+        :param anchor: the "reference" or "zero" position for the array. For example the CDS start or stop
+        :param left_offset: position relative to anchor to start the array, negative numbers will be upstream
+        :param right_offset: position relative to anchor to end the array, negative numbers will be upstream
+        :param read_end: '5p' or 3p', which end of reads to count.
+        :param read_lengths: read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :return:
+        counts_array: an array of the read counts over the window
+        length_sum_array: an array of the total length of reads at each position
+        '''
+        assert right_offset > left_offset
+        collapsed_read_dict = self.get_read_end_positions(read_end = read_end, read_lengths = 'all')
+        read_length_sums_dict = self.get_positional_length_sums(read_end = read_end)
+        counts_array = np.array([collapsed_read_dict[position] if position in collapsed_read_dict and position>=0 else 0
+                        for position in range(anchor + left_offset, anchor + right_offset + 1)])
+        length_sum_array = np.array([read_length_sums_dict[position] if position in read_length_sums_dict and position>=0 else 0
+                        for position in range(anchor + left_offset, anchor + right_offset + 1)])
+        assert len(counts_array) == len (length_sum_array)
+        return length_sum_array, counts_array
+
+    def get_cds_read_count(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        '''
+
+        :param start_offset: position relative to CDS start to open the count window, negative numbers will be upstream
+        :param stop_offset: position relative to CDS stop to close the count window, negative numbers will be upstream
+        :param read_end: '5p' or 3p', which end of reads to count.
+        :param read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :return:
+        '''
+        read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
+        return sum([read_dict[position] for position in read_dict
+                    if position>=self.cds_start+start_offset and position<=self.cds_end+stop_offset])
+
+    def get_tx_read_count(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        '''
+
+        :param start_offset: position relative to tx start to open the count window, negative numbers will be upstream
+        :param stop_offset: position relative to tx end to close the count window, negative numbers will be upstream
+        :param read_end: '5p' or 3p', which end of reads to count.
+        :param read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :return:
+        '''
+        read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
+        return sum([read_dict[position] for position in read_dict
+                    if position>=start_offset and position<=self.tx_length+stop_offset])
+
+    def get_read_frame_counts(self, start, end, read_end='5p', read_lengths='all'):
+        '''
+        :return the number of reads in each CDS frame. the first nucleotide of the  start codon is frame zero.
+        :param start: tx position (zero-indexed, inclusive) to start counting at
+        :param stop: tx position (zero-indexed, inclusive) to stop counting at
+        :param read_end: '5p' or 3p', which end of reads to count.
+        :param read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :return:
+        '''
+        read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
+        frame_counts = np.zeros(3)
+        for position in range(start, end+1):
+            if position >= 0 and position <= self.tx_length and position in read_dict:
+                cds_rel_position = position - self.cds_start
+                frame_counts[cds_rel_position%3] += read_dict[position]
+
+        return frame_counts
+
+    def second_stop_position(self):
+        #find the position of the first in-frame stop after the canonical stop codon
+
+        stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
+
+        if ribo_utils.GENETIC_CODE[stop_codon] == '_':
+            for position in range(self.cds_end, self.tx_length, 3):
+                codon = self.full_sequence[position: position+3]
+                if codon in ribo_utils.GENETIC_CODE and ribo_utils.GENETIC_CODE[codon] == '_':
+                    return position
+        else:
+            pass
+            #print self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
+        return None
+
+    def compute_readthrough_ratio(self, p_offset, read_end='3p', read_lengths='all', cds_cutoff=128):
+        cds_counts = self.get_cds_read_count(p_offset, p_offset, read_end=read_end,
+                                                   read_lengths=read_lengths)
+        cds_read_density =  cds_counts/float(self.cds_length)
+        second_stop = self.second_stop_position()
+        if not second_stop == None and cds_counts>=cds_cutoff:
+            second_stop += 3  # adjust to get the end of the stop codon
+            read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
+            second_cds_density = sum([read_dict[position] for position in read_dict
+                        if position>=self.cds_end+p_offset and position<=second_stop+p_offset])/float(second_stop-self.cds_end)
+            readthrough = second_cds_density/cds_read_density
+            if readthrough>0:
+                return math.log(readthrough, 10)
+        return None
