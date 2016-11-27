@@ -164,6 +164,11 @@ class transcript:
         self.length_dist = defaultdict(int)
         self.assign_read_ends_from_sam(sam_file)
 
+    def get_first_jxn_in_CDS(self):
+        for exon_start in self.exon_starts:
+            if exon_start> self.cds_start:
+                return exon_start
+        return None
     def assign_read_ends_from_sam(self, sam_file):
         all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
         for read in [r for r in all_mapping_reads if not r.is_secondary and not r.is_reverse]:

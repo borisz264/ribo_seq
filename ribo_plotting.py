@@ -279,7 +279,7 @@ def plot_first_exon_average(experiment, up = 500, down = 100, min_cds_reads = 12
         normed_count_sum = np.zeros(down+up+1)
         inclusion_sum = np.zeros(down + up + 1)
         for transcript in lib.transcripts.values():
-            if len(transcript.exon_starts)>1:
+            if not transcript.get_first_jxn_in_CDS() == None:
                 if read_end == '5p':
                     start_offset = -15
                     stop_offset = -12
@@ -288,7 +288,7 @@ def plot_first_exon_average(experiment, up = 500, down = 100, min_cds_reads = 12
                     stop_offset = 18
                 cds_reads = transcript.get_cds_read_count(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
                 if cds_reads >= min_cds_reads:
-                    tx_count, tx_inclusion = transcript.get_read_counts_array(transcript.exon_starts[1], -1*up, down, read_end=read_end,
+                    tx_count, tx_inclusion = transcript.get_read_counts_array(transcript.transcript.get_first_jxn_in_CDS(), -1*up, down, read_end=read_end,
                                                                     read_lengths=read_lengths)
                     normed_count_sum += tx_count/(float(cds_reads)/transcript.cds_length)
                     inclusion_sum += tx_inclusion
@@ -411,7 +411,7 @@ def plot_first_exon_positional_read_lengths(experiment, up = 500, down = 100, mi
         length_sum = np.zeros(down+up+1)
         count_sum = np.zeros(down + up + 1)
         for transcript in lib.transcripts.values():
-            if len(transcript.exon_starts)>1:
+            if not transcript.get_first_jxn_in_CDS() == None:
                 if read_end == '5p':
                     start_offset = -15
                     stop_offset = -12
@@ -420,7 +420,7 @@ def plot_first_exon_positional_read_lengths(experiment, up = 500, down = 100, mi
                     stop_offset = 18
                 cds_reads = transcript.get_cds_read_count(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
                 if cds_reads >= min_cds_reads:
-                    length_sum_array, counts_array = transcript.get_avg_read_lengths_array(transcript.exon_starts[1], -1*up, down,
+                    length_sum_array, counts_array = transcript.get_avg_read_lengths_array(transcript.transcript.get_first_jxn_in_CDS(), -1*up, down,
                                                                                            read_end=read_end)
                     length_sum += length_sum_array
                     count_sum += counts_array
