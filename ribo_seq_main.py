@@ -13,6 +13,7 @@ import ribo_utils
 import ribo_lib
 import ribo_qc
 import ribo_plotting
+import ribo_tables
 from collections import defaultdict
 import numpy as np
 import scipy.stats as stats
@@ -50,8 +51,7 @@ class experiment:
 
     def make_tables(self):
         ribo_utils.make_dir(self.rdir_path('tables'))
-        self.make_counts_table()
-        self.make_counts_table(fractional=True)
+        ribo_tables.make_readthrough_table(self)
 
     def make_plots(self):
         ribo_utils.make_dir(self.rdir_path('plots'))
