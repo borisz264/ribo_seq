@@ -169,7 +169,6 @@ class transcript:
         for read in [r for r in all_mapping_reads if not r.is_secondary and not r.is_reverse]:
             #this alignment should be the primary one. IF this throws erros, I will need to write more logic.
             assert (not read.is_reverse) and (not read.is_secondary)
-            #and (not read.is_secondary)
             fragment_start = read.reference_start #0-based start of fragment
             # get read length from sequence, or CIGAR string if unavailable
             fragment_length = read.infer_query_length(always=False)
