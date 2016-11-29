@@ -153,7 +153,7 @@ class experiment:
     def map_one_library(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
-                         '--outSAMtype BAM SortedByCoordinate --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                         '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin 1 --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                          ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(), lib_settings.get_trimmed_reads(),
                           lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
@@ -167,6 +167,7 @@ class experiment:
                                                                           lib_settings.get_transcript_mapped_reads()), shell = True).wait()
 
         subprocess.Popen('samtools index %s' % (lib_settings.get_transcript_mapped_reads()), shell = True).wait()
+        subprocess.Popen('samtools index %s' % (lib_settings.get_genome_mapped_reads()), shell=True).wait()
         lib_settings.write_to_log('mapping_reads done')
 
     def rdir_path(self, *args):

@@ -6,6 +6,7 @@ import os
 import scipy.stats as stats
 import uniform_colormaps
 import math
+from matplotlib.ticker import AutoMinorLocator
 
 '''
 def all_library_rpm_scatter(mse):
@@ -214,6 +215,8 @@ def plot_start_codon_average(experiment, up = 100, down = 500, min_cds_reads = 1
             plot.set_xlabel("relative to CDS start", fontsize=8)
         plot.set_ylabel("average density\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1 * up, down)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
         plot.get_yaxis().set_tick_params(which='both', direction='out')
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
@@ -257,6 +260,8 @@ def plot_stop_codon_average(experiment, up = 500, down = 100, min_cds_reads = 12
             plot.set_xlabel("relative to CDS stop", fontsize=8)
         plot.set_ylabel("average density\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
         plot.get_yaxis().set_tick_params(which='both', direction='out')
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
@@ -288,7 +293,7 @@ def plot_first_exon_average(experiment, up = 500, down = 100, min_cds_reads = 12
                     stop_offset = 18
                 cds_reads = transcript.get_cds_read_count(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
                 if cds_reads >= min_cds_reads:
-                    tx_count, tx_inclusion = transcript.get_read_counts_array(transcript.transcript.get_first_jxn_in_CDS(), -1*up, down, read_end=read_end,
+                    tx_count, tx_inclusion = transcript.get_read_counts_array(transcript.get_first_jxn_in_CDS(), -1*up, down, read_end=read_end,
                                                                     read_lengths=read_lengths)
                     normed_count_sum += tx_count/(float(cds_reads)/transcript.cds_length)
                     inclusion_sum += tx_inclusion
@@ -301,6 +306,8 @@ def plot_first_exon_average(experiment, up = 500, down = 100, min_cds_reads = 12
             plot.set_xlabel("relative to second exon start", fontsize=8)
         plot.set_ylabel("average density\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
         plot.get_yaxis().set_tick_params(which='both', direction='out')
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
@@ -345,6 +352,8 @@ def plot_stop_positional_read_lengths(experiment, up = 500, down = 100, min_cds_
         plot.set_ylabel("avg read length\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
         plot.set_ylim(25, 35)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
         plot.get_yaxis().set_tick_params(which='both', direction='out')
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
@@ -389,6 +398,8 @@ def plot_start_positional_read_lengths(experiment, up = 500, down = 100, min_cds
         plot.set_ylabel("avg read length\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
         plot.set_ylim(25, 35)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
         plot.get_yaxis().set_tick_params(which='both', direction='out')
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
@@ -420,7 +431,7 @@ def plot_first_exon_positional_read_lengths(experiment, up = 500, down = 100, mi
                     stop_offset = 18
                 cds_reads = transcript.get_cds_read_count(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
                 if cds_reads >= min_cds_reads:
-                    length_sum_array, counts_array = transcript.get_avg_read_lengths_array(transcript.transcript.get_first_jxn_in_CDS(), -1*up, down,
+                    length_sum_array, counts_array = transcript.get_avg_read_lengths_array(transcript.get_first_jxn_in_CDS(), -1*up, down,
                                                                                            read_end=read_end)
                     length_sum += length_sum_array
                     count_sum += counts_array
@@ -434,6 +445,8 @@ def plot_first_exon_positional_read_lengths(experiment, up = 500, down = 100, mi
         plot.set_ylabel("avg read length\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
         plot.set_ylim(25, 35)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
         plot.get_yaxis().set_tick_params(which='both', direction='out')
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
