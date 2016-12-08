@@ -226,7 +226,55 @@ def plot_start_codon_average(experiment, up = 100, down = 500, min_cds_reads = 1
     plt.savefig(out_name, transparent='True', format='pdf')
     plt.clf()
 
+def plot_second_stop_positions(experiment, up = 500, down = 100, min_cds_reads = 128, read_end='5p', read_lengths='all'):
+    num_libs = len(experiment.libs)
+    num_plots_wide = 1
+    num_plots_high = num_libs
+    fig = plt.figure(figsize=(8, 2*num_libs))
+    colormap = uniform_colormaps.viridis
+    plot_index = 0
+    for lib in experiment.libs:
+        sample_name = lib.lib_settings.sample_name
+        plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index + 1)
+        second_stop_positions = []
+        for transcript in lib.transcripts.values():
+            cds_reads = transcript.get_cds_read_count(-15, 12, read_end=read_end, read_lengths=read_lengths)
+            if cds_reads >= min_cds_reads:
+                second_stop = transcript.second_stop_position()
+                if not second_stop == None:
+                    second_stop_positions.append(second_stop-transcript.cds_end)
+        bins = range(-10, 200)
+        bins.append(1000000)
+        hist, bin_edges = np.histogram(second_stop_positions, bins)
+        plot.bar(bin_edges[:-1]-0.5, hist,
+                  color=colormap((plot_index - 1) / float(len(experiment.libs))), lw=0, label=sample_name)
+        plot.set_title(sample_name, fontsize=8)
+        plot_index += 1
+        if plot_index == num_libs:
+            plot.set_xlabel("second in-frame stop relative to CDS stop", fontsize=8)
+        plot.set_ylabel("# genes", fontsize=8)
+        plot.set_xlim(-10, 200)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
+        plot.get_xaxis().set_tick_params(which='both', direction='out')
+        plot.get_yaxis().set_tick_params(which='both', direction='out')
+    #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
+    #lg.draw_frame(False)
+    plt.tight_layout()
+    out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'second_stop_positions.pdf')
+    plt.savefig(out_name, transparent='True', format='pdf')
+    plt.clf()
+
 def plot_stop_codon_average(experiment, up = 500, down = 100, min_cds_reads = 128, read_end='5p', read_lengths='all'):
+    '''
+    :param experiment:
+    :param up:
+    :param down:
+    :param min_cds_reads:
+    :param read_end:
+    :param read_lengths:
+    :return:
+    '''
     num_libs = len(experiment.libs)
     num_plots_wide = 1
     num_plots_high = num_libs
@@ -257,7 +305,7 @@ def plot_stop_codon_average(experiment, up = 500, down = 100, min_cds_reads = 12
         plot.set_title(sample_name, fontsize=8)
         plot_index += 1
         if plot_index == num_libs:
-            plot.set_xlabel("relative to CDS stop", fontsize=8)
+            plot.set_xlabel("nt relative to stop codon", fontsize=8)
         plot.set_ylabel("average density\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
         minorLocator = AutoMinorLocator(10)
@@ -268,6 +316,65 @@ def plot_stop_codon_average(experiment, up = 500, down = 100, min_cds_reads = 12
     #lg.draw_frame(False)
     plt.tight_layout()
     out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'stop_codon_avg_%s_%s.pdf' %(read_end, str(read_lengths)))
+    plt.savefig(out_name, transparent='True', format='pdf')
+    plt.clf()
+
+
+
+def plot_second_stop_codon_average(experiment, up = 500, down = 100, min_cds_reads = 128, read_end='5p', read_lengths='all'):
+    '''
+    line up reads at first in-frame stop after canonical stop codon
+    :param experiment:
+    :param up:
+    :param down:
+    :param min_cds_reads:
+    :param read_end:
+    :param read_lengths:
+    :return:
+    '''
+    num_libs = len(experiment.libs)
+    num_plots_wide = 1
+    num_plots_high = num_libs
+    fig = plt.figure(figsize=(8, 2*num_libs))
+    colormap = uniform_colormaps.viridis
+    plot_index = 0
+    for lib in experiment.libs:
+        plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index + 1)
+        sample_name = lib.lib_settings.sample_name
+        normed_count_sum = np.zeros(down+up+1)
+        inclusion_sum = np.zeros(down + up + 1)
+        for transcript in lib.transcripts.values():
+            if read_end == '5p':
+                start_offset = -15
+                stop_offset = -12
+            elif read_end == '3p':
+                start_offset = 14
+                stop_offset = 18
+            cds_reads = transcript.get_cds_read_count(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
+            if cds_reads >= min_cds_reads:
+                second_stop = transcript.second_stop_position()
+                if not second_stop == None:
+                    tx_count, tx_inclusion = transcript.get_read_counts_array(second_stop+3, -1*up, down, read_end=read_end,
+                                                                    read_lengths=read_lengths)
+                    normed_count_sum += tx_count/(float(cds_reads)/transcript.cds_length)
+                    inclusion_sum += tx_inclusion
+        nt_positions = np.arange(-1*up, down+1)-0.5
+        plot.bar(nt_positions, normed_count_sum/inclusion_sum,
+                  color=colormap((plot_index - 1) / float(len(experiment.libs))), lw=0, label=sample_name)
+        plot.set_title(sample_name, fontsize=8)
+        plot_index += 1
+        if plot_index == num_libs:
+            plot.set_xlabel("relative to second in-frame stop", fontsize=8)
+        plot.set_ylabel("average density\n (read %s end)" % (read_end), fontsize=8)
+        plot.set_xlim(-1*up, down)
+        minorLocator = AutoMinorLocator(10)
+        plot.xaxis.set_minor_locator(minorLocator)
+        plot.get_xaxis().set_tick_params(which='both', direction='out')
+        plot.get_yaxis().set_tick_params(which='both', direction='out')
+    #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
+    #lg.draw_frame(False)
+    plt.tight_layout()
+    out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'second_stop_codon_avg_%s_%s.pdf' %(read_end, str(read_lengths)))
     plt.savefig(out_name, transparent='True', format='pdf')
     plt.clf()
 
@@ -351,7 +458,7 @@ def plot_stop_positional_read_lengths(experiment, up = 500, down = 100, min_cds_
             plot.set_xlabel("relative to CDS stop", fontsize=8)
         plot.set_ylabel("avg read length\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
-        plot.set_ylim(25, 35)
+        #plot.set_ylim(25, 35)
         minorLocator = AutoMinorLocator(10)
         plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
@@ -397,7 +504,7 @@ def plot_start_positional_read_lengths(experiment, up = 500, down = 100, min_cds
             plot.set_xlabel("relative to CDS stop", fontsize=8)
         plot.set_ylabel("avg read length\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
-        plot.set_ylim(25, 35)
+        #plot.set_ylim(25, 35)
         minorLocator = AutoMinorLocator(10)
         plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')
@@ -444,7 +551,7 @@ def plot_first_exon_positional_read_lengths(experiment, up = 500, down = 100, mi
             plot.set_xlabel("relative to CDS stop", fontsize=8)
         plot.set_ylabel("avg read length\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
-        plot.set_ylim(25, 35)
+        #plot.set_ylim(25, 35)
         minorLocator = AutoMinorLocator(10)
         plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')

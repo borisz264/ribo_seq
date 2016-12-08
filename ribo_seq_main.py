@@ -60,6 +60,10 @@ class experiment:
                                                read_end='3p', read_lengths='all')
         ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
                                                read_end='3p', read_lengths='all')
+        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                               read_end='3p', read_lengths='all')
+        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                                     read_end='3p', read_lengths=[29, 30])
         ribo_plotting.plot_first_exon_average(self, up=100, down=100, min_cds_reads=128,
                                                read_end='3p', read_lengths='all')
         ribo_plotting.plot_start_codon_average(self, up=100, down=100,
@@ -67,6 +71,7 @@ class experiment:
                                                read_end='3p', read_lengths=[29, 30])
         ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
                                           read_end='3p', read_lengths=[29, 30])
+
 
         ribo_plotting.plot_start_codon_average(self, up=100, down=100,
                                                min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
@@ -78,13 +83,24 @@ class experiment:
 
         ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
                                               read_end='5p', read_lengths='all')
+        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                              read_end='5p', read_lengths='all')
+        ribo_plotting.plot_second_stop_positions(self, up=100, down=100, min_cds_reads=128,
+                                              read_end='5p', read_lengths='all')
         ribo_plotting.plot_start_codon_average(self, up=100, down=100,
                                                min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
                                                read_end='5p', read_lengths=[29, 30])
         ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
                                               read_end='5p', read_lengths=[29, 30])
+        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+                                              read_end='5p', read_lengths=[29, 30])
+
+
+
         ribo_plotting.plot_fragment_length_distributions(self)
         ribo_plotting.plot_frame_distributions(self)
+
+
 
         ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
         ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')

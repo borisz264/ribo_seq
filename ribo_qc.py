@@ -195,9 +195,9 @@ class ribo_qc:
                         continue
             f.close()
             read_fractions = np.array(read_counts)/float(sum(read_counts))
-            bzUtils.makePickle(read_fractions, out_name)
+            ribo_utils.makePickle(read_fractions, out_name)
         else:
-            read_fractions = bzUtils.unPickle(out_name)
+            read_fractions = ribo_utils.unPickle(out_name)
 
         return (lib_settings.sample_name, read_fractions)
 
