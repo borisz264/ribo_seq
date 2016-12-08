@@ -348,7 +348,7 @@ class transcript:
             #print self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
         return None
 
-    def compute_readthrough_ratio(self, p_offset, read_end='3p', read_lengths='all', cds_cutoff=128):
+    def compute_readthrough_ratio(self, p_offset, read_end='3p', read_lengths='all', cds_cutoff=128, log=True):
         cds_counts = self.get_cds_read_count(p_offset, p_offset, read_end=read_end,
                                                    read_lengths=read_lengths)
         cds_read_density =  cds_counts/float(self.cds_length)
@@ -359,6 +359,8 @@ class transcript:
             second_cds_density = sum([read_dict[position] for position in read_dict
                         if position>=self.cds_end+p_offset and position<=second_stop+p_offset])/float(second_stop-self.cds_end)
             readthrough = second_cds_density/cds_read_density
-            if readthrough>0:
+            if log and readthrough>0:
                 return math.log(readthrough, 10)
+            else:
+                return readthrough
         return None
