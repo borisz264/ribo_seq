@@ -242,7 +242,7 @@ def plot_second_stop_positions(experiment, up = 500, down = 100, min_cds_reads =
             if cds_reads >= min_cds_reads:
                 second_stop = transcript.second_stop_position()
                 if not second_stop == None:
-                    second_stop_positions.append(second_stop-transcript.cds_end)
+                    second_stop_positions.append(second_stop+3-transcript.cds_end)
         bins = range(-10, 200)
         bins.append(1000000)
         hist, bin_edges = np.histogram(second_stop_positions, bins)

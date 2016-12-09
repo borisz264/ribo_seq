@@ -334,7 +334,8 @@ class transcript:
         return frame_counts
 
     def second_stop_position(self):
-        #find the position of the first in-frame stop after the canonical stop codon
+        #find the position of the first nt of the first in-frame stop after the canonical stop codon,
+        # relative to the start of the tx
 
         stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
 
@@ -364,3 +365,11 @@ class transcript:
             else:
                 return readthrough
         return None
+
+    def stop_codon_context(self):
+        #return the canonical stop codon sequence
+
+        stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
+
+        assert ribo_utils.GENETIC_CODE[stop_codon] == '_'
+        return self.full_sequence[self.cds_end-15: self.cds_end+12]
