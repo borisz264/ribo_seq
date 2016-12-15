@@ -26,7 +26,6 @@ def make_readthrough_table(experiment):
     f.close()
 
 def transcriptome_features_table(experiment):
-    all_transcripts = set()
     first_lib = experiment.libs[0]
     all_tx = set(first_lib.transcripts.values())
     out_name = os.path.join(experiment.settings.get_rdir(), 'tables', 'transcript_features.tsv')
@@ -34,7 +33,12 @@ def transcriptome_features_table(experiment):
     f.write('tx_id\tstop_codon_context\tsecond_stop_codon\tUTR_length\tTL_length\tCDS_length\t'
             'tx_length\textension_nt_length\tUTR_A_percent\tUTR_T_percent\tUTR_C_percent\tUTR_G_percent\n')
     for tx in all_tx:
-        values = []
-        values.append(tx.stop_codon_context())
-        f.write('%s\t%s\n' % (tx.sequence_name, '\t'.join(values)))
+        if not tx.sequence_name == None:
+            values = []
+            values=[tx.stop_codon_context(), tx.second_stop_codon(), str(tx.trailer_length), str(tx.leader_length),
+                    str(tx.cds_length), str(tx.tx_length), str(tx.readthrough_extension_length()),
+                    str(tx.trailer_monomer_fraction('A')), str(tx.trailer_monomer_fraction('T')),
+                    str(tx.trailer_monomer_fraction('C')), str(tx.trailer_monomer_fraction('G'))]
+            values = [x if x not in [None, 'None'] else '' for x in values]
+            f.write('%s\t%s\n' % (tx.sequence_name, '\t'.join(values)))
     f.close()

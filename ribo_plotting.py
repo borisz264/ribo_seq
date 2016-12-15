@@ -124,11 +124,12 @@ def plot_readthrough_box(experiment):
         data.append(readthroughs)
         legends.append('%s (%d)' % (sample_name, len(readthroughs)))
         # note that all but the last bin exclude the right (larger) edge of the bin. So I add an extra bin.
-    plot.boxplot(data, notch=True, boxprops=boxprops)
+    for data_list in data:
+        print np.mean(data_list), np.std(data_list)
+    plot.boxplot(data, notch=True, boxprops=boxprops, autorange=True)
     plot_index += 1
     #plot.set_xlabel("fragment length", fontsize=8)
     plot.set_ylabel("log10 readthrough fraction", fontsize=8)
-    plot.set_title(sample_name,  fontsize=8)
     plot.set_xticklabels(legends, rotation=40, ha='right')
     #plot.set_xlim(min_x, max(bins))
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)

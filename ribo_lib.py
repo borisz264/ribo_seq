@@ -169,6 +169,7 @@ class transcript:
             if exon_start> self.cds_start:
                 return exon_start
         return None
+
     def assign_read_ends_from_sam(self, sam_file):
         all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
         for read in [r for r in all_mapping_reads if not r.is_secondary and not r.is_reverse]:
@@ -189,6 +190,7 @@ class transcript:
             if fragment_length not in self.fragment_3p_lengths_at_position[fragment_end]:
                 self.fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
             self.fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
+
     def contains_subsequence(self, subsequence):
         if subsequence in self.full_sequence:
             return True
@@ -349,6 +351,17 @@ class transcript:
             #print self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
         return None
 
+    def second_stop_codon(self):
+        #return the triplet code of the second stop codon
+        position = self.second_stop_position()
+        if  position == None:
+            return None
+        else:
+            return self.full_sequence[position: position+3]
+    def readthrough_extension_length(self):
+        if self.second_stop_codon() == None:
+            return None
+        return self.second_stop_position()+3-self.cds_end
     def compute_readthrough_ratio(self, p_offset, read_end='3p', read_lengths='all', cds_cutoff=128, log=True):
         cds_counts = self.get_cds_read_count(p_offset, p_offset, read_end=read_end,
                                                    read_lengths=read_lengths)
@@ -360,8 +373,11 @@ class transcript:
             second_cds_density = sum([read_dict[position] for position in read_dict
                         if position>=self.cds_end+p_offset and position<=second_stop+p_offset])/float(second_stop-self.cds_end)
             readthrough = second_cds_density/cds_read_density
-            if log and readthrough>0:
-                return math.log(readthrough, 10)
+            if log:
+                if readthrough>0:
+                    return math.log(readthrough, 10)
+                else:
+                    return None
             else:
                 return readthrough
         return None
@@ -371,5 +387,16 @@ class transcript:
 
         stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
 
-        assert ribo_utils.GENETIC_CODE[stop_codon] == '_'
+        #assert ribo_utils.GENETIC_CODE[stop_codon] == '_'
         return self.full_sequence[self.cds_end-15: self.cds_end+12]
+
+    def trailer_sequence(self):
+        #return sequence of 3' trailer (3' UTR)
+        return self.full_sequence[self.cds_end: self.tx_length]
+
+    def trailer_monomer_fraction(self, monomer):
+        assert monomer.upper() in 'ATCG'
+        trailer_seq = self.trailer_sequence().upper()
+        fraction = float(trailer_seq.count(monomer))/float(len(trailer_seq))
+        return fraction
+

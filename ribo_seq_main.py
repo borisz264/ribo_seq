@@ -52,6 +52,7 @@ class experiment:
     def make_tables(self):
         ribo_utils.make_dir(self.rdir_path('tables'))
         ribo_tables.make_readthrough_table(self)
+        ribo_tables.transcriptome_features_table(self)
 
     def make_plots(self):
         ribo_utils.make_dir(self.rdir_path('plots'))
@@ -108,6 +109,7 @@ class experiment:
         ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
         ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
         ribo_plotting.plot_first_exon_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
+
         ribo_plotting.plot_readthrough_box(self)
 
 
