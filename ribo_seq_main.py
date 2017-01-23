@@ -51,8 +51,9 @@ class experiment:
 
     def make_tables(self):
         ribo_utils.make_dir(self.rdir_path('tables'))
-        ribo_tables.make_readthrough_table(self)
-        ribo_tables.transcriptome_features_table(self)
+        #ribo_tables.make_readthrough_table(self)
+        ribo_tables.make_detailed_readthrough_table(self)
+        #ribo_tables.transcriptome_features_table(self)
 
     def make_plots(self):
         ribo_utils.make_dir(self.rdir_path('plots'))

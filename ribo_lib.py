@@ -362,6 +362,7 @@ class transcript:
         if self.second_stop_codon() == None:
             return None
         return self.second_stop_position()+3-self.cds_end
+
     def compute_readthrough_ratio(self, p_offset, read_end='3p', read_lengths='all', cds_cutoff=128, log=True):
         cds_counts = self.get_cds_read_count(p_offset, p_offset, read_end=read_end,
                                                    read_lengths=read_lengths)
