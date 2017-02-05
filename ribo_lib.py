@@ -172,7 +172,7 @@ class transcript:
 
     def assign_read_ends_from_sam(self, sam_file):
         all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
-        for read in [r for r in all_mapping_reads if not r.is_secondary and not r.is_reverse]:
+        for read in [r for r in all_mapping_reads if (not r.is_secondary) and (not r.is_reverse)]:
             #this alignment should be the primary one. IF this throws erros, I will need to write more logic.
             assert (not read.is_reverse) and (not read.is_secondary)
             fragment_start = read.reference_start #0-based start of fragment
@@ -347,8 +347,8 @@ class transcript:
                 if codon in ribo_utils.GENETIC_CODE and ribo_utils.GENETIC_CODE[codon] == '_':
                     return position
         else:
-            pass
-            #print self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
+            #pass
+            print self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
         return None
 
     def second_stop_codon(self):
@@ -365,9 +365,8 @@ class transcript:
 
     def get_readthrough_counts(self, p_offset=0, read_end='5p', read_lengths='all', pre_extension_stop_buffer=0, post_cds_stop_buffer=0):
         read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
-        second_stop = self.second_stop_position()
-        return sum([read_dict[position] for position in read_dict if position>=self.cds_end+post_cds_stop_buffer-p_offset
-                    and position<=second_stop-pre_extension_stop_buffer-p_offset])
+        second_stop = self.second_stop_position()+3
+        return sum([read_dict[position] for position in read_dict if position>=self.cds_end+(post_cds_stop_buffer-p_offset) and position<=second_stop-pre_extension_stop_buffer-p_offset])
 
 
 
@@ -387,12 +386,11 @@ class transcript:
         :param post_cds_stop_buffer: omit this many nucleotides at edge from counting
         :return:
         """
-        cds_counts = self.get_cds_read_count(post_cds_start_buffer-p_offset, -1*pre_cds_stop_buffer-p_offset, read_end=read_end,
+        cds_counts = self.get_cds_read_count(post_cds_start_buffer-p_offset, (-1*pre_cds_stop_buffer)-p_offset, read_end=read_end,
                                                    read_lengths=read_lengths)
         cds_read_density =  cds_counts/float(self.cds_length)
         second_stop = self.second_stop_position()
         if not second_stop == None and cds_counts>=cds_cutoff:
-            second_stop += 3  # adjust to get the end of the stop codon
             ex_length = self.readthrough_extension_length(pre_extension_stop_buffer=pre_extension_stop_buffer,
                                               post_cds_stop_buffer=post_cds_stop_buffer)
             if ex_length > 0:

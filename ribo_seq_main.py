@@ -173,7 +173,8 @@ class experiment:
     def map_one_library(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
-                         '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin 1 --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                         '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin 1 --alignSJoverhangMin 8 ' \
+                         '--outFilterType BySJout --outFilterMultimapNmax 1 --outWigType wiggle --outFilterIntronMotifs read1_5p --outFileNamePrefix %s' \
                          ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(), lib_settings.get_trimmed_reads(),
                           lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
