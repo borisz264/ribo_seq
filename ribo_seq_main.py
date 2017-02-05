@@ -56,6 +56,7 @@ class experiment:
         #ribo_tables.transcriptome_features_table(self)
 
     def make_plots(self):
+        '''
         ribo_utils.make_dir(self.rdir_path('plots'))
 
         ribo_plotting.plot_start_codon_average(self, up=100, down=100, min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
@@ -110,7 +111,7 @@ class experiment:
         ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
         ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
         ribo_plotting.plot_first_exon_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
-
+        '''
         ribo_plotting.plot_readthrough_box(self)
 
 

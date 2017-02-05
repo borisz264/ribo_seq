@@ -358,21 +358,47 @@ class transcript:
             return None
         else:
             return self.full_sequence[position: position+3]
-    def readthrough_extension_length(self):
+    def readthrough_extension_length(self, pre_extension_stop_buffer=0, post_cds_stop_buffer=0):
         if self.second_stop_codon() == None:
             return None
-        return self.second_stop_position()+3-self.cds_end
+        return float((self.second_stop_position()+3-pre_extension_stop_buffer)-(self.cds_end+post_cds_stop_buffer))
 
-    def compute_readthrough_ratio(self, p_offset, read_end='3p', read_lengths='all', cds_cutoff=128, log=True):
-        cds_counts = self.get_cds_read_count(p_offset, p_offset, read_end=read_end,
+    def get_readthrough_counts(self, p_offset=0, read_end='5p', read_lengths='all', pre_extension_stop_buffer=0, post_cds_stop_buffer=0):
+        read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
+        second_stop = self.second_stop_position()
+        return sum([read_dict[position] for position in read_dict if position>=self.cds_end+post_cds_stop_buffer-p_offset
+                    and position<=second_stop-pre_extension_stop_buffer-p_offset])
+
+
+
+    def compute_readthrough_ratio(self, p_offset, read_end='5p', read_lengths='all', cds_cutoff=128, log=True,
+                                  post_cds_start_buffer=12, pre_cds_stop_buffer = 15, pre_extension_stop_buffer=15,
+                                  post_cds_stop_buffer=9):
+        """
+
+        :param p_offset: distance of p-site from designated read end, positive for 5p, negative for 3p
+        :param read_end:
+        :param read_lengths:
+        :param cds_cutoff:
+        :param log:
+        :param post_cds_start_buffer: omit this many nucleotides at edge from counting
+        :param pre_cds_stop_buffer: omit this many nucleotides at edge from counting
+        :param pre_extension_stop_buffer: omit this many nucleotides at edge from counting
+        :param post_cds_stop_buffer: omit this many nucleotides at edge from counting
+        :return:
+        """
+        cds_counts = self.get_cds_read_count(post_cds_start_buffer-p_offset, -1*pre_cds_stop_buffer-p_offset, read_end=read_end,
                                                    read_lengths=read_lengths)
         cds_read_density =  cds_counts/float(self.cds_length)
         second_stop = self.second_stop_position()
         if not second_stop == None and cds_counts>=cds_cutoff:
             second_stop += 3  # adjust to get the end of the stop codon
             read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
-            second_cds_density = sum([read_dict[position] for position in read_dict
-                        if position>=self.cds_end+p_offset and position<=second_stop+p_offset])/float(second_stop-self.cds_end)
+            second_cds_density = self.get_readthrough_counts(p_offset=p_offset, read_end=read_end, read_lengths=read_lengths,
+                                                             pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                             post_cds_stop_buffer=post_cds_stop_buffer)/\
+                                 self.readthrough_extension_length(pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                             post_cds_stop_buffer=post_cds_stop_buffer)
             readthrough = second_cds_density/cds_read_density
             if log:
                 if readthrough>0:

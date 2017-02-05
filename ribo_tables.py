@@ -25,7 +25,9 @@ def make_readthrough_table(experiment):
         f.write('%s\t%s\n' % (tx_name, '\t'.join(values)))
     f.close()
 
-def make_detailed_readthrough_table(experiment):
+def make_detailed_readthrough_table(experiment, p_site_offset = 16, read_end='5p', read_lengths='all', cds_cutoff=128,
+                                    log=False, post_cds_start_buffer=12, pre_cds_stop_buffer=15,
+                                    pre_extension_stop_buffer=15, post_cds_stop_buffer=9):
     #a much more detailed table, which has the raw read numbers and region sizes
     all_genes = set()
     sample_names = []
@@ -37,8 +39,11 @@ def make_detailed_readthrough_table(experiment):
         header_items = ['rt_ratio', 'rt_counts', 'cds_counts']
         for item in header_items:
             headers.append('%s_%s' % (sample_name, item))
-        tx_w_data = set([tx.sequence_name for tx in lib.transcripts.values() if not tx.compute_readthrough_ratio(16, read_end='3p', read_lengths='all',
-                                                                                           cds_cutoff=128) == None ])
+        tx_w_data = set([tx.sequence_name for tx in lib.transcripts.values()
+                         if tx.compute_readthrough_ratio(p_site_offset, read_end=read_end, read_lengths=read_lengths,
+                                                         cds_cutoff=cds_cutoff, log=log, post_cds_start_buffer=post_cds_start_buffer,
+                                                         pre_cds_stop_buffer=pre_cds_stop_buffer, pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                         post_cds_stop_buffer=post_cds_stop_buffer) is not None ])
         all_genes = all_genes.union(tx_w_data)
     headers.append('cds_length')
     headers.append('readthrough_length')
@@ -54,12 +59,16 @@ def make_detailed_readthrough_table(experiment):
             #3: CDS counts
             if tx_name in lib.transcripts:
                 tx = lib.get_transcript(tx_name)
-                rt_ratio = str(tx.compute_readthrough_ratio(p_offset, read_end='3p', read_lengths='all', cds_cutoff=128, log=False))
-                read_dict = tx.get_read_end_positions(read_end='3p', read_lengths='all')
+                rt_ratio = str(tx.compute_readthrough_ratio(p_site_offset, read_end=read_end, read_lengths=read_lengths,
+                                                         cds_cutoff=cds_cutoff, log=log, post_cds_start_buffer=post_cds_start_buffer,
+                                                         pre_cds_stop_buffer=pre_cds_stop_buffer, pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                         post_cds_stop_buffer=post_cds_stop_buffer))
                 second_stop = tx.second_stop_position()#zero indexed to beggining of stop codon
-                rt_counts = str(sum([read_dict[position] for position in read_dict
-                        if position>tx.cds_end-2+p_offset and position<=second_stop+p_offset]))
-                cds_counts = str(tx.get_cds_read_count(p_offset, p_offset, read_end='3p', read_lengths='all'))
+                rt_counts = str(tx.get_readthrough_counts(p_offset=p_offset, read_end=read_end, read_lengths=read_lengths,
+                                                          pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                          post_cds_stop_buffer=post_cds_stop_buffer))
+                cds_counts = str(tx.get_cds_read_count(post_cds_start_buffer-p_offset, -1*pre_cds_stop_buffer-p_offset,
+                                                       read_end=read_end, read_lengths=read_lengths))
                 if rt_ratio == None:
                     rt_ratio = ''
             else:

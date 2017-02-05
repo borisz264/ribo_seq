@@ -117,17 +117,19 @@ def plot_readthrough_box(experiment):
     boxprops = dict(linewidth=2, color=ribo_utils.black)
     for lib in experiment.libs:
         sample_name = lib.lib_settings.sample_name
-        readthroughs = [tx.compute_readthrough_ratio(16, read_end='3p', read_lengths='all', cds_cutoff=128) for
-                        tx in lib.transcripts.values() if not tx.compute_readthrough_ratio(16, read_end='3p',
-                                                                                           read_lengths='all',
-                                                                                           cds_cutoff=128) == None ]
+        readthroughs = [tx.compute_readthrough_ratio(16, read_end='5p', read_lengths='all', cds_cutoff=128,
+                                    log=False, post_cds_start_buffer=12, pre_cds_stop_buffer=15,
+                                    pre_extension_stop_buffer=15, post_cds_stop_buffer=9) for
+                        tx in lib.transcripts.values() if not tx.compute_readthrough_ratio(16, read_end='5p', read_lengths='all', cds_cutoff=128,
+                                    log=False, post_cds_start_buffer=12, pre_cds_stop_buffer=15,
+                                    pre_extension_stop_buffer=15, post_cds_stop_buffer=9) == None ]
         data.append(readthroughs)
         legends.append('%s (%d)' % (sample_name, len(readthroughs)))
         # note that all but the last bin exclude the right (larger) edge of the bin. So I add an extra bin.
     plot.boxplot(data, notch=True, boxprops=boxprops, autorange=True)
     plot_index += 1
     #plot.set_xlabel("fragment length", fontsize=8)
-    plot.set_ylabel("log10 readthrough fraction", fontsize=8)
+    plot.set_ylabel("readthrough fraction", fontsize=8)
     plot.set_xticklabels(legends, rotation=40, ha='right')
     #plot.set_xlim(min_x, max(bins))
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
