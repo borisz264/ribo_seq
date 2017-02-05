@@ -393,20 +393,21 @@ class transcript:
         second_stop = self.second_stop_position()
         if not second_stop == None and cds_counts>=cds_cutoff:
             second_stop += 3  # adjust to get the end of the stop codon
-            read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
-            second_cds_density = self.get_readthrough_counts(p_offset=p_offset, read_end=read_end, read_lengths=read_lengths,
-                                                             pre_extension_stop_buffer=pre_extension_stop_buffer,
-                                                             post_cds_stop_buffer=post_cds_stop_buffer)/\
-                                 self.readthrough_extension_length(pre_extension_stop_buffer=pre_extension_stop_buffer,
-                                                             post_cds_stop_buffer=post_cds_stop_buffer)
-            readthrough = second_cds_density/cds_read_density
-            if log:
-                if readthrough>0:
-                    return math.log(readthrough, 10)
+            ex_length = self.readthrough_extension_length(pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                              post_cds_stop_buffer=post_cds_stop_buffer)
+            if ex_length > 0:
+                second_cds_density = self.get_readthrough_counts(p_offset=p_offset, read_end=read_end, read_lengths=read_lengths,
+                                                                 pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                                 post_cds_stop_buffer=post_cds_stop_buffer)/ex_length
+
+                readthrough = second_cds_density/cds_read_density
+                if log:
+                    if readthrough>0:
+                        return math.log(readthrough, 10)
+                    else:
+                        return None
                 else:
-                    return None
-            else:
-                return readthrough
+                    return readthrough
         return None
 
     def stop_codon_context(self):
