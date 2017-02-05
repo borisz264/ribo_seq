@@ -51,12 +51,12 @@ class experiment:
 
     def make_tables(self):
         ribo_utils.make_dir(self.rdir_path('tables'))
-        #ribo_tables.make_readthrough_table(self)
+        ribo_tables.make_readthrough_table(self)
         ribo_tables.make_detailed_readthrough_table(self)
-        #ribo_tables.transcriptome_features_table(self)
+        ribo_tables.transcriptome_features_table(self)
 
     def make_plots(self):
-        '''
+
         ribo_utils.make_dir(self.rdir_path('plots'))
 
         ribo_plotting.plot_start_codon_average(self, up=100, down=100, min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
@@ -111,9 +111,9 @@ class experiment:
         ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
         ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
         ribo_plotting.plot_first_exon_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
-        '''
-        ribo_plotting.plot_readthrough_box(self)
 
+        ribo_plotting.plot_readthrough_box(self)
+        ribo_plotting.plot_readthrough_box(self, log=True)
 
 
     def remove_adaptor(self):
@@ -174,7 +174,7 @@ class experiment:
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
                          '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin 1 --alignSJoverhangMin 8 ' \
-                         '--outFilterType BySJout --outFilterMultimapNmax 1 --outWigType wiggle --outFilterIntronMotifs read1_5p --outFileNamePrefix %s' \
+                         '--outFilterType BySJout --outFilterMultimapNmax 1 --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                          ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(), lib_settings.get_trimmed_reads(),
                           lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())

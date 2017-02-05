@@ -104,7 +104,7 @@ def plot_fragment_length_distributions(experiment, min_x=15):
     plt.savefig(out_name, transparent='True', format='pdf')
     plt.clf()
 
-def plot_readthrough_box(experiment):
+def plot_readthrough_box(experiment, log = False):
     fig = plt.figure(figsize=(8, 8))
     num_libs = len(experiment.libs)
     num_plots_wide = 1
@@ -118,10 +118,10 @@ def plot_readthrough_box(experiment):
     for lib in experiment.libs:
         sample_name = lib.lib_settings.sample_name
         readthroughs = [tx.compute_readthrough_ratio(16, read_end='5p', read_lengths='all', cds_cutoff=128,
-                                    log=False, post_cds_start_buffer=12, pre_cds_stop_buffer=15,
+                                    log=log, post_cds_start_buffer=12, pre_cds_stop_buffer=15,
                                     pre_extension_stop_buffer=15, post_cds_stop_buffer=9) for
                         tx in lib.transcripts.values() if not tx.compute_readthrough_ratio(16, read_end='5p', read_lengths='all', cds_cutoff=128,
-                                    log=False, post_cds_start_buffer=12, pre_cds_stop_buffer=15,
+                                    log=log, post_cds_start_buffer=12, pre_cds_stop_buffer=15,
                                     pre_extension_stop_buffer=15, post_cds_stop_buffer=9) == None ]
         data.append(readthroughs)
         legends.append('%s (%d)' % (sample_name, len(readthroughs)))
@@ -129,13 +129,19 @@ def plot_readthrough_box(experiment):
     plot.boxplot(data, notch=True, boxprops=boxprops, autorange=True)
     plot_index += 1
     #plot.set_xlabel("fragment length", fontsize=8)
-    plot.set_ylabel("readthrough fraction", fontsize=8)
+    if log:
+        plot.set_ylabel("log10 readthrough fraction", fontsize=8)
+    else:
+        plot.set_ylabel("readthrough fraction", fontsize=8)
     plot.set_xticklabels(legends, rotation=40, ha='right')
     #plot.set_xlim(min_x, max(bins))
     #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
     #lg.draw_frame(False)
     plt.tight_layout()
-    out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'readthrough_box.pdf')
+    if log:
+        out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'log_readthrough_box.pdf')
+    else:
+        out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'readthrough_box.pdf')
     plt.savefig(out_name, transparent='True', format='pdf')
     plt.clf()
 
