@@ -7,6 +7,9 @@ import scipy.stats as stats
 import uniform_colormaps
 import math
 from matplotlib.ticker import AutoMinorLocator
+from matplotlib import rc
+rc('font',**{'family':'sans-serif','sans-serif':['Bitstream Vera Sans']})
+
 
 '''
 def all_library_rpm_scatter(mse):
