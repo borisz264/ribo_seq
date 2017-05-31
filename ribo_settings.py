@@ -4,6 +4,7 @@ import simplejson
 import itertools
 import shutil
 import datetime
+import sys
 
 import ribo_utils
 
@@ -81,7 +82,11 @@ class ribo_settings:
         self.fastq_gz_files = settings['fastq_gz_files']
         self.fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file) for fastq_gz_file in self.fastq_gz_files]
         for file_handle in self.fastq_gz_file_handles:
-            assert ribo_utils.file_exists(file_handle)
+            try:
+                assert ribo_utils.file_exists(file_handle)
+            except:
+                print 'ERROR: nonexistent file ', file_handle
+                sys.exit()
         for k in extant_files:
             assert ribo_utils.file_exists(settings[k])
         self.settings = settings
