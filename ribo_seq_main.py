@@ -54,6 +54,8 @@ class experiment:
         ribo_tables.make_readthrough_table(self)
         ribo_tables.make_detailed_readthrough_table(self)
         ribo_tables.transcriptome_features_table(self)
+        ribo_tables.make_cds_rpkm_table(self)
+        ribo_tables.make_cds_counts_table(self)
 
     def make_plots(self):
 
@@ -320,10 +322,5 @@ def main():
         settings.write_to_log('making plots')
         ribo_experiment.make_plots()
         settings.write_to_log('done making plots')
-    '''
-    if args.comparisons or args.all_tasks:
-        settings.write_to_log('doing comparisons')
-        ribo_experiment.compare_all_other_experiments()
-    '''
 
 main()
