@@ -39,6 +39,8 @@ class ribo_lib:
         self.total_mapped_fragments = sum([transcript.fragment_count for transcript in self.transcripts.values()])
         self.total_mapped_counts = {}  # maps a set of parameters to the total number of read counts under those parameters
 
+    def __repr__(self):
+        return "ribo-seq lib for %s" % (self.lib_settings.sample_name)
 
     def name_sorted_counts(self):
         #returns counts for each sequence in pool, sorted by their sequence names, alphabetically
@@ -126,7 +128,7 @@ class ribo_lib:
 
     def get_cds_rpkm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
         return self.get_cds_rpm(sequence_name, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) / \
-               self.transcripts[sequence_name].cds_length
+               (self.transcripts[sequence_name].cds_length-start_offset+stop_offset)
 
 class transcript:
     """

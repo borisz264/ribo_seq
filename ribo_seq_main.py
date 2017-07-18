@@ -65,53 +65,12 @@ class experiment:
                                                read_end='3p', read_lengths='all')
         ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
                                                read_end='3p', read_lengths='all')
-        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
-                                               read_end='3p', read_lengths='all')
-        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
-                                                     read_end='3p', read_lengths=[29, 30])
-        ribo_plotting.plot_first_exon_average(self, up=100, down=100, min_cds_reads=128,
-                                               read_end='3p', read_lengths='all')
-        ribo_plotting.plot_start_codon_average(self, up=100, down=100,
-                                               min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
-                                               read_end='3p', read_lengths=[29, 30])
-        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
-                                          read_end='3p', read_lengths=[29, 30])
-
-
-        ribo_plotting.plot_start_codon_average(self, up=100, down=100,
-                                               min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
-                                               read_end='5p', read_lengths='all')
-
-        ribo_plotting.plot_first_exon_average(self, up=100, down=100,
-                                               min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
-                                               read_end='5p', read_lengths='all')
-
-        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
-                                              read_end='5p', read_lengths='all')
-        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
-                                              read_end='5p', read_lengths='all')
-        ribo_plotting.plot_second_stop_positions(self, up=100, down=100, min_cds_reads=128,
-                                              read_end='5p', read_lengths='all')
-        ribo_plotting.plot_start_codon_average(self, up=100, down=100,
-                                               min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
-                                               read_end='5p', read_lengths=[29, 30])
-        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
-                                              read_end='5p', read_lengths=[29, 30])
-        ribo_plotting.plot_second_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
-                                              read_end='5p', read_lengths=[29, 30])
-
-
 
         ribo_plotting.plot_fragment_length_distributions(self)
         ribo_plotting.plot_frame_distributions(self)
 
-
-
         ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
-        ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
-        ribo_plotting.plot_first_exon_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
         ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
-        ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='5p')
         ribo_plotting.plot_first_exon_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
 
         ribo_plotting.plot_readthrough_box(self)
@@ -208,7 +167,7 @@ class experiment:
 
     def perform_qc(self):
         qc_engine = ribo_qc.ribo_qc(self, self.settings, self.threads)
-        qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
+        #qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
         qc_engine.print_library_count_concordances()
         qc_engine.plot_average_read_positions()
         qc_engine.plot_fragment_length_distributions()
@@ -286,11 +245,8 @@ def parse_args():
     parser.add_argument("--make-plots",
                         help="Makes plots.",
                         action='store_true')
-    parser.add_argument("--comparisons",
-                        help="Does comparisons to other experiments",
-                        action='store_true')
     parser.add_argument("--all-tasks",
-                        help="Makes plots, tables, folding and comparisons",
+                        help="Makes plots, tables",
                         action='store_true')
     parser.add_argument("--threads",
                         help="Max number of processes to use",
@@ -306,11 +262,6 @@ def main():
     settings = ribo_settings.ribo_settings(args.settings_file)
     ribo_experiment = experiment(settings, args.threads)
     print 'experiment ready'
-    if args.perform_qc or args.all_tasks:
-        print 'QC'
-        settings.write_to_log('performing QC')
-        ribo_experiment.perform_qc()
-        settings.write_to_log('done performing QC')
     if args.make_tables or args.all_tasks:
         print 'tables'
         settings.write_to_log('making tables')
@@ -323,4 +274,6 @@ def main():
         ribo_experiment.make_plots()
         settings.write_to_log('done making plots')
 
-main()
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()

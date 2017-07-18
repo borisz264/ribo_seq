@@ -37,7 +37,7 @@ def make_cds_rpkm_table(experiment):
     f = open(out_name, 'w')
     f.write('tx_id\t%s\n' % '\t'.join(sample_names))
     for tx_name in all_genes:
-        values = [str(lib.get_cds_rpkm(tx_name, -12, -15, read_end='5p', read_lengths='all')) for lib in experiment.libs]
+        values = [str(lib.get_cds_rpkm(tx_name, 75, -30, read_end='3p', read_lengths='all')) for lib in experiment.libs]
         f.write('%s\t%s\n' % (tx_name, '\t'.join(values)))
     f.close()
 
@@ -53,7 +53,7 @@ def make_cds_counts_table(experiment):
     f = open(out_name, 'w')
     f.write('tx_id\t%s\n' % '\t'.join(sample_names))
     for tx_name in all_genes:
-        values = [str(lib.get_transcript(tx_name).get_cds_read_count(-12, -15, read_end='5p', read_lengths='all')) for lib in experiment.libs]
+        values = [str(lib.get_transcript(tx_name).get_cds_read_count(75, -30, read_end='3p', read_lengths='all')) for lib in experiment.libs]
         f.write('%s\t%s\n' % (tx_name, '\t'.join(values)))
     f.close()
 
