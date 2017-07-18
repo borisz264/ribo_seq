@@ -94,37 +94,6 @@ class ribo_settings:
         ribo_utils.make_dir(self.rdir)
         shutil.copy(settings_file, self.rdir)
 
-    def check_barcode_lens(self):
-        """
-        verifies that all the barcodes are the same length
-        """
-        barcode_lens = set(map(len, self.settings['barcodes']))
-        if 1 != len(barcode_lens):
-            raise ValueError('all barcodes must be the same length')
-        self.barcode_len = barcode_lens.pop()
-        self.settings['barcode_len'] = self.barcode_len
-
-    def check_barcodes_are_separated(self):
-        """
-        makes sure the barcodes are all totally distinguishable
-        """
-        for b1, b2 in itertools.combinations(self.settings['barcodes'], 2):
-            hamming_dist = ribo_utils.hamming_distance(b1, b2)
-            if hamming_dist < 2:
-                raise ValueError('The barcodes supplied are not well '
-                  'separated: %s-%s' % (b1, b2))
-
-    def get_bowtie_index(self):
-        index = os.path.join(
-          self.get_rdir(),
-          'bowtie_indices',
-          'pool_index')
-        return index
-
-    def get_rRNA_bowtie_index(self):
-        index = index = self.get_property('rrna_index')
-        return index
-
     def get_star_genome_dir(self):
         index = self.get_property('star_genome_dir')
         return index
