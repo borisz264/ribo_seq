@@ -48,7 +48,7 @@ class ribo_settings:
                      'quality_cutoff', 'trim_5p']
         #float_keys = []
         str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'canonical_tx_features', 'canonical_tx_seqs']
-        boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor', 'make_interactive_plots']
+        boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim',  'make_interactive_plots']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['canonical_tx_features', 'canonical_tx_seqs']

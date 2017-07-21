@@ -119,10 +119,9 @@ class experiment:
             else:
                 return
 
-        if self.settings.get_property('trim_adaptor'):
-            ribo_utils.make_dir(self.rdir_path('adaptor_removed'))
-            map(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads),
-                              self.settings.iter_lib_settings())
+        ribo_utils.make_dir(self.rdir_path('adaptor_removed'))
+        map(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads),
+                          self.settings.iter_lib_settings())
         self.settings.write_to_log('done removing adaptors')
 
     def remove_adaptor_one_lib(self, lib_settings, threads):
