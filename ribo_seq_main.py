@@ -23,6 +23,7 @@ class experiment:
         self.threads = threads
         self.settings = settings
         self.num_libs = len([x for x in settings.iter_lib_settings()])
+        self.trim_reads()
         self.remove_adaptor()
         self.map_reads()
         self.initialize_libs()
@@ -76,21 +77,53 @@ class experiment:
         ribo_plotting.plot_readthrough_box(self)
         ribo_plotting.plot_readthrough_box(self, log=True)
 
-
-    def remove_adaptor(self):
-        self.settings.write_to_log('trimming adaptors')
+    def trim_reads(self):
+        self.settings.write_to_log('trimming reads')
         if not self.settings.get_property('force_retrim'):
             for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.trimmed_reads_exist():
+                if not lib_settings.adaptorless_reads_exist():
+                    break
+            else:
+                return
+
+        if self.settings.get_property('trim_5p')>0:
+            ribo_utils.make_dir(self.rdir_path('trimmed'))
+            ribo_utils.parmap(lambda lib_setting: self.trim_reads_one_lib(lib_setting),
+                              self.settings.iter_lib_settings(), nprocs=self.threads)
+        self.settings.write_to_log('done trimming reads')
+
+    def trim_reads_one_lib(self, lib_settings):
+        lib_settings.write_to_log('read trimming')
+        """
+        -x specifies the 3' adaptor to trim from the forward read
+        -Q specifies the lowest acceptable mean read quality before trimming
+        -l specifies the minimum post-trimming read length
+        -L specifies the maximum post-trimming read length
+        -o is the output prefix
+        --threads specifies number of threads to use
+        """
+        command_to_run = 'gunzip -c %s | fastx_trimmer -f %d -z -o %s 1>>%s 2>>%s' % (
+            lib_settings.get_fastq_gz_file(),
+            self.settings.get_property('trim_5p')+1,
+            lib_settings.get_trimmed_reads(),
+            lib_settings.get_log(), lib_settings.get_log())
+        subprocess.Popen(command_to_run, shell=True).wait()
+        lib_settings.write_to_log('read trimming done')
+
+    def remove_adaptor(self):
+        self.settings.write_to_log('removing adaptors')
+        if not self.settings.get_property('force_retrim'):
+            for lib_settings in self.settings.iter_lib_settings():
+                if not lib_settings.adaptorless_reads_exist():
                     break
             else:
                 return
 
         if self.settings.get_property('trim_adaptor'):
-            ribo_utils.make_dir(self.rdir_path('trimmed_reads'))
+            ribo_utils.make_dir(self.rdir_path('adaptor_removed'))
             map(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads),
                               self.settings.iter_lib_settings())
-        self.settings.write_to_log('done trimming adaptors')
+        self.settings.write_to_log('done removing adaptors')
 
     def remove_adaptor_one_lib(self, lib_settings, threads):
         lib_settings.write_to_log('adaptor trimming')
@@ -102,16 +135,17 @@ class experiment:
         -o is the output prefix
         --threads specifies number of threads to use
         """
-        command_to_run = 'skewer -x %s -Q %d  -l %d -L %d -o %s --quiet --threads %s %s 1>>%s 2>>%s' % (
+        command_to_run = 'skewer -x %s -Q %d -l %d -L %d -o %s --quiet --threads %s %s 1>>%s 2>>%s' % (
             self.settings.get_property('adaptor_3p_sequence'),
-            self.settings.get_property('quality_cutoff'), self.settings.get_property('min_insert_length'),
+            self.settings.get_property('quality_cutoff'),
+            self.settings.get_property('min_insert_length'),
             self.settings.get_property('max_insert_length'),
-            lib_settings.get_trimmed_reads(prefix_only=True),
+            lib_settings.get_adaptor_trimmed_reads(prefix_only=True),
             threads,
-            lib_settings.get_fastq_gz_file(),
+            lib_settings.get_trimmed_reads(),
             lib_settings.get_log(), lib_settings.get_log())
         subprocess.Popen(command_to_run, shell=True).wait()
-        subprocess.Popen('gzip %s-trimmed.fastq' % (lib_settings.get_trimmed_reads(prefix_only=True)), shell=True).wait()
+        subprocess.Popen('gzip %s-trimmed.fastq' % (lib_settings.get_adaptor_trimmed_reads(prefix_only=True)), shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
 
 
@@ -137,13 +171,13 @@ class experiment:
                          '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin 1 --alignSJoverhangMin 8 ' \
                          '--outFilterType BySJout --outFilterMultimapNmax 1 --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                          ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
-                         (threads, self.settings.get_star_genome_dir(), lib_settings.get_trimmed_reads(),
+                         (threads, self.settings.get_star_genome_dir(), lib_settings.get_adaptor_trimmed_reads(),
                           lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
 
         subprocess.Popen(command_to_run, shell=True).wait()
         #sort transcript-mapped bam file
 
-        subprocess.Popen('samtools sort %s %s.temp_sorted 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
+        subprocess.Popen('samtools sort %s -o %s.temp_sorted.bam 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
                                                                           lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
         subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
                                                                           lib_settings.get_transcript_mapped_reads()), shell = True).wait()
