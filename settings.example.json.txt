@@ -1,0 +1,24 @@
+[ input ]
+fastq_dir = /path/to/FASTQ/dir
+fastq_gz_files = ["HNMCFBCXY_1_CCTGAG_1.fastq.gz", "HNMCFBCXY_1_GAACCC_1.fastq.gz", "HNMCFBCXY_1_TTCAGA_1.fastq.gz", "HNMCFBCXY_1_TGCTGT_1.fastq.gz", "HNMCFBCXY_1_CATCAC_1.fastq.gz", "HNMCFBCXY_1_GTAACA_1.fastq.gz"]
+sample_names = ["1_cushion_no_dep", "2_cushion_hot_elute", "3_cushion_cold_elute", "4_gradient_no_depletion", "5_gradient_hot_elute", "6_gradient_cold_elute"]
+
+[ parameters ]
+experiment_name = my_profiling_experiment
+adaptor_3p_sequence = NNNNNNCACTCGGGCACCAAGGAC
+trim_5p = 4
+star_genome_dir = /path/to/star/index/dir
+canonical_tx_features = /path/to/hg38_canonical_transcripts.tsv
+canonical_tx_seqs = /path/to/hg38_canonical_transcripts.fa
+min_insert_length = 10
+max_insert_length = 50
+quality_cutoff = 10
+comparison_read_cutoff = 128
+force_retrim = False
+force_remapping = False
+force_index_rebuild = False
+force_recount = False
+make_interactive_plots = True
+
+[ output ]
+results_dir = /path/to/output/folder
