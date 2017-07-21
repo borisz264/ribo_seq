@@ -45,7 +45,7 @@ class ribo_settings:
         - stores result in self.settings as a dict()
         """
         int_keys = ['comparison_read_cutoff', 'min_insert_length', 'max_insert_length',
-                     'quality_cutoff']
+                     'quality_cutoff', 'trim_5p']
         #float_keys = []
         str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'canonical_tx_features', 'canonical_tx_seqs']
         boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim', 'trim_adaptor', 'make_interactive_plots']
@@ -175,20 +175,29 @@ class ribo_lib_settings:
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.toTranscriptome.out.bam' % {'sample_name': self.sample_name})
         return mapped_reads
 
-    def get_trimmed_reads(self, prefix_only = False):
+    def get_adaptor_trimmed_reads(self, prefix_only = False):
         if prefix_only:
             trimmed_reads = os.path.join(
                 self.experiment_settings.get_rdir(),
-                'trimmed_reads',
+                'adaptor_removed',
                 '%(sample_name)s' %
                 {'sample_name': self.sample_name})
         else:
             trimmed_reads = os.path.join(
               self.experiment_settings.get_rdir(),
-              'trimmed_reads',
+              'adaptor_removed',
               '%(sample_name)s-trimmed.fastq.gz' %
                {'sample_name': self.sample_name})
         return trimmed_reads
+
+    def get_trimmed_reads(self):
+        trimmed_reads = os.path.join(
+          self.experiment_settings.get_rdir(),
+          'trimmed',
+          '%(sample_name)s.fastq.gz' %
+           {'sample_name': self.sample_name})
+        return trimmed_reads
+
 
     def get_trimming_log(self):
         """
@@ -220,6 +229,10 @@ class ribo_lib_settings:
     def collapsed_reads_exist(self):
         collapsed_reads = self.get_collapsed_reads()
         return ribo_utils.file_exists(collapsed_reads)
+
+    def adaptorless_reads_exist(self):
+        trimmed_reads = self.get_adaptor_trimmed_reads()
+        return ribo_utils.file_exists(trimmed_reads)
 
     def trimmed_reads_exist(self):
         trimmed_reads = self.get_trimmed_reads()
