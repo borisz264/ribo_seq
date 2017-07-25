@@ -269,24 +269,29 @@ def get_barcode(line):
     return line.split('#')[-1].split('/')[0]
 
 
-def convertFastaToDict(fastaFile):
+def convertFastaToDict(fastaFile, *args):
     '''
     converts a fasta file to a dict of {sequenceName:sequence}
+    can take extra files in * args
     '''
+    files = [fastaFile]
+    for extra_file in args:
+        files.append(extra_file)
     currentName = None
     currentSequence = None
     seqDict = {}
-    f = open(fastaFile)
-    for line in f:
-        if not line.strip() == '' and not line.startswith('#'):#ignore empty lines and commented out lines
-            if line.startswith('>'):#> marks the start of a new sequence
-                if not currentName == None: #after we've reached the firtst > line, we know what the sequence corresponds to
-                    seqDict[currentName] = currentSequence.upper()
-                currentName = line.strip()[1:]
-                currentSequence = ''
-            else:
-                currentSequence += line.strip()
-    f.close()
+    for currentFile in files:
+        f = open(currentFile)
+        for line in f:
+            if not line.strip() == '' and not line.startswith('#'):#ignore empty lines and commented out lines
+                if line.startswith('>'):#> marks the start of a new sequence
+                    if not currentName == None: #after we've reached the firtst > line, we know what the sequence corresponds to
+                        seqDict[currentName] = currentSequence.upper()
+                    currentName = line.strip()[1:]
+                    currentSequence = ''
+                else:
+                    currentSequence += line.strip()
+        f.close()
     seqDict[currentName] = currentSequence.upper()
     return seqDict
 
