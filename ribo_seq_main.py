@@ -22,12 +22,14 @@ class experiment:
     def __init__(self, settings, threads):
         self.threads = threads
         self.settings = settings
+        self.settings.write_to_log('Initializing experiment %s' % self.settings.get_property('experiment_name'))
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.make_mapping_index()
-        #self.trim_reads()
-        #self.remove_adaptor()
+        self.trim_reads()
+        self.remove_adaptor()
         #self.map_reads()
         #self.initialize_libs()
+        self.settings.write_to_log('Finished initializing experiment %s' % self.settings.get_property('experiment_name'))
 
     def make_mapping_index(self):
         make_index = False
@@ -51,6 +53,41 @@ class experiment:
             self.settings.write_to_log(command_to_run)
             subprocess.Popen(command_to_run, shell=True).wait()
         self.settings.write_to_log('STAR index ready')
+
+    def trim_reads(self):
+        if not self.settings.get_property('force_retrim'):
+            for lib_settings in self.settings.iter_lib_settings():
+                if not lib_settings.adaptorless_reads_exist():
+                    break
+            else: #else clause executes if break dio not occur
+                self.settings.write_to_log('using existing trimmed reads')
+                return
+        self.settings.write_to_log('trimming reads')
+        ribo_utils.make_dir(self.rdir_path('trimmed'))
+        ribo_utils.parmap(lambda lib_setting: self.trim_reads_one_lib(lib_setting),
+                          self.settings.iter_lib_settings(), nprocs=self.threads)
+        self.settings.write_to_log('done trimming reads')
+
+    def trim_reads_one_lib(self, lib_settings):
+        lib_settings.write_to_log('read trimming')
+        """
+        -x specifies the 3' adaptor to trim from the forward read
+        -Q specifies the lowest acceptable mean read quality before trimming
+        -l specifies the minimum post-trimming read length
+        -L specifies the maximum post-trimming read length
+        -o is the output prefix
+        --threads specifies number of threads to use
+        """
+        command_to_run = 'gunzip -c %s | fastx_trimmer -f %d -z -o %s 1>>%s 2>>%s' % (
+            lib_settings.get_fastq_gz_file(),
+            self.settings.get_property('trim_5p')+1,
+            lib_settings.get_trimmed_reads(),
+            lib_settings.get_log(), lib_settings.get_log())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
+        lib_settings.write_to_log('read trimming done')
+
+
 
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')
@@ -100,40 +137,6 @@ class experiment:
 
         ribo_plotting.plot_readthrough_box(self)
         ribo_plotting.plot_readthrough_box(self, log=True)
-
-    def trim_reads(self):
-        self.settings.write_to_log('trimming reads')
-        if not self.settings.get_property('force_retrim'):
-            for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.adaptorless_reads_exist():
-                    break
-            else:
-                return
-
-        if self.settings.get_property('trim_5p')>0:
-            ribo_utils.make_dir(self.rdir_path('trimmed'))
-            ribo_utils.parmap(lambda lib_setting: self.trim_reads_one_lib(lib_setting),
-                              self.settings.iter_lib_settings(), nprocs=self.threads)
-        self.settings.write_to_log('done trimming reads')
-
-    def trim_reads_one_lib(self, lib_settings):
-        lib_settings.write_to_log('read trimming')
-        """
-        -x specifies the 3' adaptor to trim from the forward read
-        -Q specifies the lowest acceptable mean read quality before trimming
-        -l specifies the minimum post-trimming read length
-        -L specifies the maximum post-trimming read length
-        -o is the output prefix
-        --threads specifies number of threads to use
-        """
-        command_to_run = 'gunzip -c %s | fastx_trimmer -f %d -z -o %s 1>>%s 2>>%s' % (
-            lib_settings.get_fastq_gz_file(),
-            self.settings.get_property('trim_5p')+1,
-            lib_settings.get_trimmed_reads(),
-            lib_settings.get_log(), lib_settings.get_log())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell=True).wait()
-        lib_settings.write_to_log('read trimming done')
 
     def remove_adaptor(self):
         self.settings.write_to_log('removing adaptors')
