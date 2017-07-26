@@ -29,7 +29,7 @@ class experiment:
         self.remove_adaptor()
         #self.map_reads()
         #self.initialize_libs()
-        self.settings.write_to_log('Finished initializing experiment %s' % self.settings.get_property('experiment_name'))
+        self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
 
     def make_mapping_index(self):
         make_index = False
@@ -57,11 +57,13 @@ class experiment:
     def trim_reads(self):
         if not self.settings.get_property('force_retrim'):
             for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.adaptorless_reads_exist():
+                if not lib_settings.trimmed_reads_exist():
                     break
-            else: #else clause executes if break dio not occur
+            else: #else clause executes if break did not occur
                 self.settings.write_to_log('using existing trimmed reads')
                 return
+        else:
+            self.settings.write_to_log('read trimming forced')
         self.settings.write_to_log('trimming reads')
         ribo_utils.make_dir(self.rdir_path('trimmed'))
         ribo_utils.parmap(lambda lib_setting: self.trim_reads_one_lib(lib_setting),
@@ -87,6 +89,47 @@ class experiment:
         subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('read trimming done')
 
+    def remove_adaptor(self):
+        if not self.settings.get_property('force_retrim'):
+            for lib_settings in self.settings.iter_lib_settings():
+                if not lib_settings.adaptorless_reads_exist():
+                    break
+            else:
+                self.settings.write_to_log('using existing adaptorless reads')
+                return
+        else:
+            self.settings.write_to_log('adaptor removal forced')
+        self.settings.write_to_log('removing adaptors')
+        ribo_utils.make_dir(self.rdir_path('adaptor_removed'))
+        map(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads),
+                          self.settings.iter_lib_settings())
+        self.settings.write_to_log('done removing adaptors')
+
+    def remove_adaptor_one_lib(self, lib_settings, threads):
+        lib_settings.write_to_log('adaptor trimming')
+        """
+        -x specifies the 3' adaptor to trim from the forward read
+        -Q specifies the lowest acceptable mean read quality before trimming
+        -l specifies the minimum post-trimming read length
+        -L specifies the maximum post-trimming read length
+        -o is the output prefix
+        --threads specifies number of threads to use
+        """
+        command_to_run = 'skewer -x %s -Q %d -l %d -L %d -o %s --quiet --threads %s %s 1>>%s 2>>%s' % (
+            self.settings.get_property('adaptor_3p_sequence'),
+            self.settings.get_property('sequence_quality_cutoff'),
+            self.settings.get_property('min_post_trimming_length'),
+            self.settings.get_property('max_post_trimming_length'),
+            lib_settings.get_adaptor_trimmed_reads(prefix_only=True),
+            threads,
+            lib_settings.get_trimmed_reads(),
+            lib_settings.get_log(), lib_settings.get_log())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
+        compression_command = 'gzip %s-trimmed.fastq' % (lib_settings.get_adaptor_trimmed_reads(prefix_only=True))
+        lib_settings.write_to_log(compression_command)
+        subprocess.Popen(compression_command, shell=True).wait()
+        lib_settings.write_to_log('adaptor trimming done')
 
 
     def initialize_libs(self):
@@ -137,45 +180,6 @@ class experiment:
 
         ribo_plotting.plot_readthrough_box(self)
         ribo_plotting.plot_readthrough_box(self, log=True)
-
-    def remove_adaptor(self):
-        self.settings.write_to_log('removing adaptors')
-        if not self.settings.get_property('force_retrim'):
-            for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.adaptorless_reads_exist():
-                    break
-            else:
-                return
-
-        ribo_utils.make_dir(self.rdir_path('adaptor_removed'))
-        map(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads),
-                          self.settings.iter_lib_settings())
-        self.settings.write_to_log('done removing adaptors')
-
-    def remove_adaptor_one_lib(self, lib_settings, threads):
-        lib_settings.write_to_log('adaptor trimming')
-        """
-        -x specifies the 3' adaptor to trim from the forward read
-        -Q specifies the lowest acceptable mean read quality before trimming
-        -l specifies the minimum post-trimming read length
-        -L specifies the maximum post-trimming read length
-        -o is the output prefix
-        --threads specifies number of threads to use
-        """
-        command_to_run = 'skewer -x %s -Q %d -l %d -L %d -o %s --quiet --compress --threads %s %s 1>>%s 2>>%s' % (
-            self.settings.get_property('adaptor_3p_sequence'),
-            self.settings.get_property('sequence_quality_cutoff'),
-            self.settings.get_property('min_post_trimming_length'),
-            self.settings.get_property('max_post_trimming_length'),
-            lib_settings.get_adaptor_trimmed_reads(prefix_only=True),
-            threads,
-            lib_settings.get_trimmed_reads(),
-            lib_settings.get_log(), lib_settings.get_log())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell=True).wait()
-        #subprocess.Popen('gzip %s-trimmed.fastq' % (lib_settings.get_adaptor_trimmed_reads(prefix_only=True)), shell=True).wait()
-        lib_settings.write_to_log('adaptor trimming done')
-
 
     def map_reads(self):
         """

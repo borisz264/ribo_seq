@@ -199,7 +199,6 @@ class ribo_lib_settings:
            {'sample_name': self.sample_name})
         return trimmed_reads
 
-
     def get_trimming_log(self):
         """
         :return: name of trimming log from Skewer
@@ -218,14 +217,6 @@ class ribo_lib_settings:
           '%(sample_name)s.counts.pkl' %
            {'sample_name': self.sample_name})
         return sequence_counts
-
-    def get_overall_contamination_summary(self):
-        summary_file = os.path.join(
-          self.experiment_settings.get_rdir(),
-          'QC',
-          '%(sample_name)s.contamination_summary.txt' %
-           {'sample_name': self.sample_name})
-        return summary_file
 
     def collapsed_reads_exist(self):
         collapsed_reads = self.get_collapsed_reads()
