@@ -44,14 +44,15 @@ class ribo_settings:
         - reads the settings file and converts str to float, list, etc.
         - stores result in self.settings as a dict()
         """
-        int_keys = ['comparison_read_cutoff', 'min_insert_length', 'max_insert_length',
-                     'quality_cutoff', 'trim_5p']
+        # TODO: Add new parameters and comments to settings files
+        int_keys = ['comparison_read_cutoff', 'min_post_trimming_length', 'max_post_trimming_length',
+                     'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity']
         #float_keys = []
-        str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'canonical_tx_features', 'canonical_tx_seqs']
-        boolean_keys = ['force_remapping', 'force_recount', 'force_index_rebuild', 'force_retrim',  'make_interactive_plots']
+        str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'genome_sequence_dir', 'annotation_gtf_file']
+        boolean_keys = ['force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
-        extant_files = ['canonical_tx_features', 'canonical_tx_seqs']
+        extant_files = ['genome_sequence_dir', 'annotation_gtf_file']
         config = ConfigParser.ConfigParser()
         config.read(settings_file)
         settings = {}

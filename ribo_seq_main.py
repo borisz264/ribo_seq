@@ -23,10 +23,34 @@ class experiment:
         self.threads = threads
         self.settings = settings
         self.num_libs = len([x for x in settings.iter_lib_settings()])
-        self.trim_reads()
-        self.remove_adaptor()
-        self.map_reads()
-        self.initialize_libs()
+        self.make_mapping_index()
+        #self.trim_reads()
+        #self.remove_adaptor()
+        #self.map_reads()
+        #self.initialize_libs()
+
+    def make_mapping_index(self):
+        make_index = False
+        if ribo_utils.file_exists(self.settings.get_property('star_genome_dir')):
+            self.settings.write_to_log('STAR index exists at %s' % self.settings.get_property('star_genome_dir'))
+            if self.settings.get_property('rebuild_star_index'):
+                self.settings.write_to_log('STAR index rebuild forced')
+                make_index = True
+            else:
+                self.settings.write_to_log('using existing STAR index')
+        else:
+            make_index = True
+            ribo_utils.make_dir(self.settings.get_property('star_genome_dir'))
+        if make_index:
+            self.settings.write_to_log('building STAR index')
+            command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --sjdbGTFfile %s --sjdbOverhang %d --genomeSAsparseD %d 1>>%s 2>>%s' % (
+                self.threads, self.settings.get_property('star_genome_dir'), self.settings.get_property('genome_sequence_dir'),
+                self.settings.get_property('annotation_gtf_file'), self.settings.get_property('max_post_trimming_length')-1,
+                self.settings.get_property('star_index_sparsity'),
+                self.settings.get_log(), self.settings.get_log())
+            self.settings.write_to_log(command_to_run)
+            subprocess.Popen(command_to_run, shell=True).wait()
+        self.settings.write_to_log('STAR index ready')
 
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')
@@ -107,6 +131,7 @@ class experiment:
             self.settings.get_property('trim_5p')+1,
             lib_settings.get_trimmed_reads(),
             lib_settings.get_log(), lib_settings.get_log())
+        lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('read trimming done')
 
@@ -134,17 +159,18 @@ class experiment:
         -o is the output prefix
         --threads specifies number of threads to use
         """
-        command_to_run = 'skewer -x %s -Q %d -l %d -L %d -o %s --quiet --threads %s %s 1>>%s 2>>%s' % (
+        command_to_run = 'skewer -x %s -Q %d -l %d -L %d -o %s --quiet --compress --threads %s %s 1>>%s 2>>%s' % (
             self.settings.get_property('adaptor_3p_sequence'),
-            self.settings.get_property('quality_cutoff'),
-            self.settings.get_property('min_insert_length'),
-            self.settings.get_property('max_insert_length'),
+            self.settings.get_property('sequence_quality_cutoff'),
+            self.settings.get_property('min_post_trimming_length'),
+            self.settings.get_property('max_post_trimming_length'),
             lib_settings.get_adaptor_trimmed_reads(prefix_only=True),
             threads,
             lib_settings.get_trimmed_reads(),
             lib_settings.get_log(), lib_settings.get_log())
+        lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
-        subprocess.Popen('gzip %s-trimmed.fastq' % (lib_settings.get_adaptor_trimmed_reads(prefix_only=True)), shell=True).wait()
+        #subprocess.Popen('gzip %s-trimmed.fastq' % (lib_settings.get_adaptor_trimmed_reads(prefix_only=True)), shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
 
 
@@ -172,10 +198,9 @@ class experiment:
                          ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(), lib_settings.get_adaptor_trimmed_reads(),
                           lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
-
+        lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
         #sort transcript-mapped bam file
-
         subprocess.Popen('samtools sort %s -o %s.temp_sorted.bam 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
                                                                           lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
         subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
@@ -200,12 +225,6 @@ class experiment:
 
     def perform_qc(self):
         qc_engine = ribo_qc.ribo_qc(self, self.settings, self.threads)
-        #qc_engine.write_mapping_summary(self.settings.get_overall_mapping_summary())
-        qc_engine.print_library_count_concordances()
-        qc_engine.plot_average_read_positions()
-        qc_engine.plot_fragment_length_distributions()
-        qc_engine.plot_count_distributions()
-        qc_engine.read_cutoff_choice_plot()
 
     def make_counts_table(self, fractional=False):
         """
