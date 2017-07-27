@@ -24,6 +24,8 @@ class ribo_qc:
         self.experiment_settings.write_to_log('initializing QC engine')
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
+        self.genome = ribo_utils.genome_sequence(self.experiment_settings.get_genome_sequence_files())
+        self.GTF_annotations = ribo_utils.gtf_data(self.experiment_settings.get_annotation_GTF_file())
         self.lib_QCs = [single_lib_qc(self, lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
         ribo_utils.make_dir(self.experiment.rdir_path('QC'))
 

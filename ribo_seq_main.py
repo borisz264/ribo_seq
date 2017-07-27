@@ -47,8 +47,8 @@ class experiment:
         if make_index:
             self.settings.write_to_log('building STAR index')
             command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --sjdbGTFfile %s --sjdbOverhang %d --genomeSAsparseD %d 1>>%s 2>>%s' % (
-                self.threads, self.settings.get_property('star_genome_dir'), self.settings.get_property('genome_sequence_dir'),
-                self.settings.get_property('annotation_gtf_file'), self.settings.get_property('max_post_trimming_length')-1,
+                self.threads, self.settings.get_property('star_genome_dir'), self.settings.get_genome_sequence_dir(),
+                self.settings.get_annotation_GTF_file(), self.settings.get_property('max_post_trimming_length')-1,
                 self.settings.get_property('star_index_sparsity'),
                 self.settings.get_log(), self.settings.get_log())
             self.settings.write_to_log(command_to_run)

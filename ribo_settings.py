@@ -12,10 +12,13 @@ class ribo_settings:
     def __init__(self, settings_file):
         self.settings_file = settings_file
         self.process_settings(settings_file)
+
     def get_force_recount(self, count_type):
         return self.settings['force_%s_recount' % count_type]
+
     def get_settings_file(self):
         return self.settings_file
+
     def get_property(self, property, default=None):
         try:
             if not property in self.settings and default != None:
@@ -24,9 +27,11 @@ class ribo_settings:
         except:
             print self.settings
             raise  ValueError('cannot find %s' % property)
+
     def get_rdir(self):
         ribo_utils.make_dir(self.rdir)
         return self.rdir
+
     def iter_lib_settings(self):
         for i in range(len(self.sample_names)):
             yield ribo_lib_settings(self,
@@ -92,9 +97,6 @@ class ribo_settings:
         ribo_utils.make_dir(self.rdir)
         shutil.copy(settings_file, self.rdir)
 
-    def get_star_genome_dir(self):
-        index = self.get_property('star_genome_dir')
-        return index
 
     def get_log(self):
         log = os.path.join(
@@ -113,8 +115,29 @@ class ribo_settings:
         f.close()
 
     ##########################
-    # Global File Getters for QC
+    # Global File Getters
     ##########################
+    def get_star_genome_dir(self):
+        index = self.get_property('star_genome_dir')
+        return index
+
+    def get_genome_sequence_dir(self):
+        genome_dir = self.get_property('genome_sequence_dir')
+        return genome_dir
+
+    def get_genome_sequence_files(self, allowed_endings=['.fa']):
+        genome_dir = self.get_property('genome_sequence_dir')
+        fasta_files = set()
+        for file in os.listdir(genome_dir):
+            for ending in allowed_endings:
+                if file.endswith(ending):
+                    fasta_files.add(os.path.join(self.get_property('genome_sequence_dir'), file))
+        return sorted(fasta_files)
+
+    def get_annotation_GTF_file(self):
+        anno_file = self.get_property('annotation_gtf_file')
+        return anno_file
+
     def get_trimming_count_summary(self):
         summary_file = os.path.join(
           self.get_rdir(),
@@ -128,6 +151,7 @@ class ribo_settings:
           'QC',
           'trimming_summary_percent.tsv')
         return summary_file
+
     def get_mapping_summary(self):
         summary_file = os.path.join(
           self.get_rdir(),
