@@ -27,12 +27,6 @@ class ribo_settings:
     def get_rdir(self):
         ribo_utils.make_dir(self.rdir)
         return self.rdir
-    def get_wdir(self):
-        ribo_utils.make_dir(self.wdir)
-        return self.wdir
-    def get_input_barcode(self):
-        return self.settings['library_seq_barcode']
-
     def iter_lib_settings(self):
         for i in range(len(self.sample_names)):
             yield ribo_lib_settings(self,
@@ -118,7 +112,23 @@ class ribo_settings:
             f.write(text)
         f.close()
 
-    def get_overall_mapping_summary(self):
+    ##########################
+    # Global File Getters for QC
+    ##########################
+    def get_trimming_count_summary(self):
+        summary_file = os.path.join(
+          self.get_rdir(),
+          'QC',
+          'trimming_summary.tsv')
+        return summary_file
+
+    def get_trimming_percent_summary(self):
+        summary_file = os.path.join(
+          self.get_rdir(),
+          'QC',
+          'trimming_summary_percent.tsv')
+        return summary_file
+    def get_mapping_summary(self):
         summary_file = os.path.join(
           self.get_rdir(),
           'QC',
@@ -142,6 +152,7 @@ class ribo_lib_settings:
           '%(sample_name)s.log' %
            {'sample_name': self.sample_name})
         return log
+
     def write_to_log(self, text, add_time = True):
         f = open(self.get_log(), 'a')
         now = datetime.datetime.now()
@@ -152,32 +163,19 @@ class ribo_lib_settings:
             f.write(text)
         f.close()
 
+    ########################
+    #File Getters
+    ########################
     def get_fastq_gz_file(self):
         return self.fastq_gz_filehandle
 
-    def get_collapsed_reads(self):
-        collapsed_reads = os.path.join(
+    def get_trimmed_reads(self):
+        trimmed_reads = os.path.join(
           self.experiment_settings.get_rdir(),
-          'collapsed_reads',
-          '%(sample_name)s.fasta.gz' %
+          'trimmed',
+          '%(sample_name)s.fastq.gz' %
            {'sample_name': self.sample_name})
-        return collapsed_reads
-
-    def get_pool_mapping_stats(self):
-        pool_mapping_stats = os.path.join(self.experiment_settings.get_rdir(), 'mapping_stats', '%(sample_name)s.pool.txt' % {'sample_name': self.sample_name})
-        return pool_mapping_stats
-
-    def get_mapped_reads_prefix(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s' % {'sample_name': self.sample_name})
-        return mapped_reads
-
-    def get_genome_mapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
-        return mapped_reads
-
-    def get_transcript_mapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.toTranscriptome.out.bam' % {'sample_name': self.sample_name})
-        return mapped_reads
+        return trimmed_reads
 
     def get_adaptor_trimmed_reads(self, prefix_only = False):
         if prefix_only:
@@ -194,24 +192,28 @@ class ribo_lib_settings:
                {'sample_name': self.sample_name})
         return trimmed_reads
 
-    def get_trimmed_reads(self):
-        trimmed_reads = os.path.join(
-          self.experiment_settings.get_rdir(),
-          'trimmed',
-          '%(sample_name)s.fastq.gz' %
-           {'sample_name': self.sample_name})
-        return trimmed_reads
-
-    def get_trimming_log(self):
+    def get_adaptor_trimming_log(self):
         """
         :return: name of trimming log from Skewer
         """
         trimming_log = os.path.join(
           self.experiment_settings.get_rdir(),
-          'trimmed_reads',
+          'adaptor_removed',
           '%(sample_name)s-trimmed.log' %
            {'sample_name': self.sample_name})
         return trimming_log
+
+    def get_mapped_reads_prefix(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s' % {'sample_name': self.sample_name})
+        return mapped_reads
+
+    def get_genome_mapped_reads(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
+        return mapped_reads
+
+    def get_transcript_mapped_reads(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.toTranscriptome.out.bam' % {'sample_name': self.sample_name})
+        return mapped_reads
 
     def get_transcript_counts(self):
         sequence_counts = os.path.join(
@@ -221,9 +223,9 @@ class ribo_lib_settings:
            {'sample_name': self.sample_name})
         return sequence_counts
 
-    def collapsed_reads_exist(self):
-        collapsed_reads = self.get_collapsed_reads()
-        return ribo_utils.file_exists(collapsed_reads)
+    #####################
+    # Checks for existence
+    #####################
 
     def adaptorless_reads_exist(self):
         trimmed_reads = self.get_adaptor_trimmed_reads()

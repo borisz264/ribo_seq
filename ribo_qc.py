@@ -11,6 +11,7 @@ import numpy as np
 import itertools
 import math
 import gzip
+import pysam
 
 class ribo_qc:
     def __init__(self, experiment, experiment_settings, threads):
@@ -20,9 +21,10 @@ class ribo_qc:
         self.threads = threads
         self.experiment = experiment
         self.experiment_settings = experiment_settings
+        self.experiment_settings.write_to_log('initializing QC engine')
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
-        self.get_wdir = experiment_settings.get_wdir
+        self.lib_QCs = [single_lib_qc(self, lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
         ribo_utils.make_dir(self.experiment.rdir_path('QC'))
 
     def write_mapping_summary(self, output_file):
@@ -51,6 +53,76 @@ class ribo_qc:
                                                                                100*(uniquely_aligned_pairs+multiply_aligned_pairs)/float(total_reads)))
         f.close()
 
-    def get_adaptor_trimming_stats(self, log_file):
+    def write_trimming_stats_summary(self):
+        out_file = open(self.experiment_settings.get_trimming_count_summary(), 'w')
+        out_percent_file = open(self.experiment_settings.get_trimming_percent_summary(), 'w')
 
-        return
+        header_list = ['trimming stat'] + [single_lib_qc.lib_settings.sample_name for single_lib_qc in self.lib_QCs]
+        header_line = '%s\n' % ('\t'.join(header_list))
+        out_file.write(header_line)
+        out_percent_file.write(header_line)
+        for stat_name in ['reads processed','reads filtered out by quality control',
+                          'short reads filtered out after trimming by size control',
+                          'empty reads filtered out after trimming by size control',
+                          'reads available', 'trimmed reads available']:
+            out_list = [stat_name] + [str(single_lib_qc.adaptor_stats[stat_name]) for single_lib_qc in self.lib_QCs]
+            out_percent_list = [stat_name] +\
+                               [str(100.*single_lib_qc.adaptor_stats[
+                                        stat_name]/float(single_lib_qc.adaptor_stats['reads processed']))
+                                for single_lib_qc in self.lib_QCs]
+            out_line = '%s\n' % ('\t'.join(out_list))
+            out_file.write(out_line)
+            out_percent_line = '%s\n' % ('\t'.join(out_percent_list))
+            out_percent_file.write(out_percent_line)
+
+        out_file.close()
+        out_percent_file.close()
+
+class single_lib_qc():
+    def __init__(self, parent_qc, lib_settings):
+        """
+        Constructor for Library class
+        """
+        self.parent_qc = parent_qc
+        self.lib_settings = lib_settings
+        self.get_adaptor_trimming_stats()
+        #self.samfile = pysam.AlignmentFile(lib_settings.get_transcript_mapped_reads(), "rb")
+
+    def get_adaptor_trimming_stats(self):
+        """
+        Parses the outpur from skewer to consolidate stats
+        :param lib_settings: 
+        :return: 
+        """
+        self.lib_settings.write_to_log('parsing adpator trimming stats in %s' % (self.lib_settings.get_adaptor_trimming_log()))
+        self.adaptor_stats = {}
+        trimming_log = open(self.lib_settings.get_adaptor_trimming_log())
+        for line in trimming_log:
+            if "reads processed; of these:" in line:
+                self.adaptor_stats['reads processed'] = int(line.strip().split()[0])
+                line = trimming_log.next()
+                self.adaptor_stats['reads filtered out by quality control'] = int(line.strip().split()[0])
+                line = trimming_log.next()
+                self.adaptor_stats['short reads filtered out after trimming by size control'] = int(line.strip().split()[0])
+                line = trimming_log.next()
+                self.adaptor_stats['empty reads filtered out after trimming by size control'] = int(line.strip().split()[0])
+                line = trimming_log.next()
+                self.adaptor_stats['reads available'] = int(line.strip().split()[0])
+                line = trimming_log.next()
+                self.adaptor_stats['trimmed reads available'] = int(line.strip().split()[0])
+            if "Length distribution of reads after trimming:" in line:
+                self.adaptor_stats['post_trimming_lengths'] = {}
+                line = trimming_log.next()
+                while True:
+                    try:
+                        line = trimming_log.next()
+                        ll = line.strip().split()
+                        length = int(ll[0])
+                        count = int(ll[1])
+                        self.adaptor_stats['post_trimming_lengths'][length] = count
+                    except:
+                        break
+        trimming_log.close()
+        self.lib_settings.write_to_log('done parsing adpator trimming stats')
+
+

@@ -28,6 +28,7 @@ class experiment:
         self.trim_reads()
         self.remove_adaptor()
         self.map_reads()
+        self.perform_qc()
         #self.initialize_libs()
         self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
 
@@ -157,10 +158,10 @@ class experiment:
                          '--outFilterType BySJout --outFilterMultimapNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                          ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(),
-                          self.settings.get_property('alignSJDBoverhangMin'),
-                          self.settings.get_property('alignSJoverhangMin'),
-                          self.settings.get_property('outFilterMultimapNmax'),
                           lib_settings.get_adaptor_trimmed_reads(),
+                          self.settings.get_property('alignsjdboverhangmin'),
+                          self.settings.get_property('alignsjoverhangmin'),
+                          self.settings.get_property('outfiltermultimapnmax'),
                           lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
@@ -181,6 +182,12 @@ class experiment:
         subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('mapping_reads done')
 
+    def perform_qc(self):
+        self.settings.write_to_log('performing QC')
+        qc_engine = ribo_qc.ribo_qc(self, self.settings, self.threads)
+        qc_engine.write_trimming_stats_summary()
+        self.settings.write_to_log('done QC')
+
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')
         ribo_utils.make_dir(self.rdir_path('transcript_counts'))
@@ -191,13 +198,11 @@ class experiment:
         map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
         self.settings.write_to_log('initializing libraries, counting reads, done')
 
-
     def find_lib_by_sample_name(self, sample_name):
         for lib in self.libs:
             if lib.lib_settings.sample_name == sample_name:
                 return lib
         assert False #if this triggers, your settings file is broken.
-
 
     def initialize_lib(self, lib_settings):
         lib = ribo_lib.ribo_lib(self.settings, lib_settings)
@@ -230,57 +235,8 @@ class experiment:
         ribo_plotting.plot_readthrough_box(self)
         ribo_plotting.plot_readthrough_box(self, log=True)
 
-    def map_reads(self):
-        """
-        map all reads using bowtie
-        :return:
-        """
-        self.settings.write_to_log('mapping reads')
-        if not self.settings.get_property('force_remapping'):
-            for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.mapped_reads_exist():
-                    break
-            else:
-                return
-        ribo_utils.make_dir(self.rdir_path('mapped_reads'))
-        map(lambda lib_setting: self.map_one_library(lib_setting, self.threads), self.settings.iter_lib_settings())
-        self.settings.write_to_log( 'finished mapping reads')
-
-    def map_one_library(self, lib_settings, threads):
-        lib_settings.write_to_log('mapping_reads')
-        command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
-                         '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin 1 --alignSJoverhangMin 8 ' \
-                         '--outFilterType BySJout --outFilterMultimapNmax 1 --outWigType wiggle read1_5p --outFileNamePrefix %s' \
-                         ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
-                         (threads, self.settings.get_star_genome_dir(), lib_settings.get_adaptor_trimmed_reads(),
-                          lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell=True).wait()
-        #sort transcript-mapped bam file
-        subprocess.Popen('samtools sort %s -o %s.temp_sorted.bam 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
-                                                                          lib_settings.get_log(), lib_settings.get_log()), shell=True).wait()
-        subprocess.Popen('mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
-                                                                          lib_settings.get_transcript_mapped_reads()), shell = True).wait()
-
-        subprocess.Popen('samtools index %s' % (lib_settings.get_transcript_mapped_reads()), shell = True).wait()
-        subprocess.Popen('samtools index %s' % (lib_settings.get_genome_mapped_reads()), shell=True).wait()
-        lib_settings.write_to_log('mapping_reads done')
-
     def rdir_path(self, *args):
         return os.path.join(self.settings.get_rdir(), *args)
-
-    def get_rdir_fhandle(self, *args):
-        """
-        returns a filehandle to the fname in the rdir
-        """
-        out_path = self.rdir_path(*args)
-        out_dir = os.path.dirname(out_path)
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        return ribo_utils.aopen(out_path, 'w')
-
-    def perform_qc(self):
-        qc_engine = ribo_qc.ribo_qc(self, self.settings, self.threads)
 
     def make_counts_table(self, fractional=False):
         """
@@ -312,33 +268,6 @@ class experiment:
                                                     for lib in self.libs]))
                 summary_file.write(out_line)
         summary_file.close()
-
-
-
-    def write_sequence_subset(self, recruitment_cutoff, read_cutoff=128, as_RNA=True):
-        """
-        write out fasta of all sequences that pass a certain recruitment cutoff in all libraries
-        :return:
-        """
-        output_file = open(os.path.join(
-            self.rdir_path('tables'),
-            'recruitment_above_%f.fasta' % recruitment_cutoff), 'w')
-        trimmed_sequences = ribo_utils.convertFastaToDict(self.settings.get_trimmed_pool_fasta())
-
-        for sequence_name in self.monosome_libs[0].pool_sequence_mappings:
-            rec_scores = [(self.monosome_libs[i].get_rpm(sequence_name) / (self.monosome_libs[i].get_rpm(sequence_name) +
-                                                                           self.mrnp_libs[i].get_rpm(sequence_name)))
-                          for i in range(len(self.monosome_libs)) if (self.monosome_libs[i].get_counts(sequence_name) +
-                              self.mrnp_libs[i].get_counts(sequence_name)) >= read_cutoff]
-            if (len(rec_scores) == len(self.monosome_libs)):
-                average_score = np.average(rec_scores)
-                if average_score >=recruitment_cutoff:
-                    output_file.write('>%s_rec_%f\n' % (sequence_name, average_score))
-                    seq = trimmed_sequences[sequence_name]
-                    if as_RNA:
-                        seq = ribo_utils.rna(seq)
-                    output_file.write('%s\n' % (seq))
-        output_file.close()
 
 
 def parse_args():
