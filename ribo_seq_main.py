@@ -27,7 +27,7 @@ class experiment:
         self.make_mapping_index()
         self.trim_reads()
         self.remove_adaptor()
-        #self.map_reads()
+        self.map_reads()
         #self.initialize_libs()
         self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
 
@@ -131,6 +131,55 @@ class experiment:
         subprocess.Popen(compression_command, shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
 
+    def map_reads(self):
+        """
+        map all reads using bowtie
+        :return:
+        """
+        if not self.settings.get_property('force_remapping'):
+            for lib_settings in self.settings.iter_lib_settings():
+                if not lib_settings.mapped_reads_exist():
+                    break
+            else:
+                self.settings.write_to_log('using existing mapped reads')
+                return
+        else:
+            self.settings.write_to_log('remapping forced')
+        self.settings.write_to_log('mapping reads')
+        ribo_utils.make_dir(self.rdir_path('mapped_reads'))
+        map(lambda lib_setting: self.map_one_library(lib_setting, self.threads), self.settings.iter_lib_settings())
+        self.settings.write_to_log( 'finished mapping reads')
+
+    def map_one_library(self, lib_settings, threads):
+        lib_settings.write_to_log('mapping_reads')
+        command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
+                         '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin %d --alignSJoverhangMin %d ' \
+                         '--outFilterType BySJout --outFilterMultimapNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                         ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
+                         (threads, self.settings.get_star_genome_dir(),
+                          self.settings.get_property('alignSJDBoverhangMin'),
+                          self.settings.get_property('alignSJoverhangMin'),
+                          self.settings.get_property('outFilterMultimapNmax'),
+                          lib_settings.get_adaptor_trimmed_reads(),
+                          lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
+        #sort transcript-mapped bam file
+        command_to_run = 'samtools sort %s -o %s.temp_sorted.bam 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
+                                                                          lib_settings.get_log(), lib_settings.get_log())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
+        command_to_run = 'mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
+                                                                          lib_settings.get_transcript_mapped_reads())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell = True).wait()
+        command_to_run = 'samtools index %s' % (lib_settings.get_transcript_mapped_reads())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell = True).wait()
+        command_to_run = 'samtools index %s' % (lib_settings.get_genome_mapped_reads())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
+        lib_settings.write_to_log('mapping_reads done')
 
     def initialize_libs(self):
         self.settings.write_to_log('initializing libraries, counting reads')

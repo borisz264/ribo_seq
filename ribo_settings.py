@@ -43,10 +43,13 @@ class ribo_settings:
         """
         - reads the settings file and converts str to float, list, etc.
         - stores result in self.settings as a dict()
+        - CRITICAL NOTE: All keys must be lower case
         """
         # TODO: Add new parameters and comments to settings files
+
         int_keys = ['comparison_read_cutoff', 'min_post_trimming_length', 'max_post_trimming_length',
-                     'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity']
+                     'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity', 'outfiltermultimapnmax',
+                    'alignsjdboverhangmin', 'alignsjoverhangmin']
         #float_keys = []
         str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'genome_sequence_dir', 'annotation_gtf_file']
         boolean_keys = ['force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots']
