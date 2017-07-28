@@ -88,8 +88,9 @@ class single_lib_qc():
         self.parent_qc = parent_qc
         self.lib_settings = lib_settings
         self.get_adaptor_trimming_stats()
-        #self.samfile = pysam.AlignmentFile(lib_settings.get_transcript_mapped_reads(), "rb")
-
+        #self.samfile = pysam.AlignmentFile(lib_settings.get_genome_mapped_reads(), "rb")
+        #self.get_mapping_multiplicity_stats()
+        #self.samfile.close()
     def get_adaptor_trimming_stats(self):
         """
         Parses the outpur from skewer to consolidate stats
@@ -127,4 +128,32 @@ class single_lib_qc():
         trimming_log.close()
         self.lib_settings.write_to_log('done parsing adpator trimming stats')
 
+    def get_mapping_multiplicity_stats(self):
+        #TODO: remove print statements and have this written to a summary file
+        total_alignments = 0
+        primary_alignments = 0
+        secondary_alignments = 0
+        unmapped_alignments = 0
+        multiplicity = defaultdict(int)
+        for alignment in self.samfile.fetch():
+            if alignment.is_secondary:
+                secondary_alignments += 1
+            else:
+                primary_alignments += 1
+                multiplicity[int(alignment.get_tag('NH:i'))] += 1
+            if alignment.is_unmapped:
+                unmapped_alignments += 1
+            total_alignments += 1
+        print self.lib_settings.sample_name
+        print 'total: ', total_alignments
+        print 'primary: ', primary_alignments
+        print 'unique mapping: ', multiplicity[1]
+        multimapping = sum([multiplicity[mult] for mult in multiplicity.keys() if mult !=1])
+        print 'multiply mapping: ', multimapping
+        print 'secondary: ', secondary_alignments
+        print 'unmapped: ', unmapped_alignments
+
+
+        #for mult in sorted(multiplicity.keys()):
+        #    print '%d: %d' % (mult, multiplicity[mult])
 
