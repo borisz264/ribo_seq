@@ -269,7 +269,6 @@ def get_barcode(line):
     """
     return line.split('#')[-1].split('/')[0]
 
-
 def convertFastaToDict(fastaFile):
     '''
     converts a fasta file to a dict of {sequenceName:sequence}
@@ -432,42 +431,33 @@ class genome_sequence():
 
 class gtf_data():
     def __init__(self, gtf_file):
-        self.gtf_file = gtf_file
         self.gtf_entries = []
         self.transcript_to_entries = defaultdict(set)
         self.gene_to_entries = defaultdict(set)
         self.genes_to_tx = defaultdict(set)
-        if self.gtf_file.endswith('.gz'):
-            gtf = gzip.open(self.gtf_file)
-        else:
-            gtf = open(self.gtf_file)
-        for line in gtf:
-            if not line.startswith('#'):
-                new_entry = gtf_entry(line)
-                self.gtf_entries.append(new_entry)
-                gene_id = new_entry.get_value('gene_id')
-                transcript_id = new_entry.get_value('transcript_id')
-                if gene_id != None:
-                    self.gene_to_entries[gene_id].add(new_entry)
-                    if transcript_id != None:
-                        self.transcript_to_entries[transcript_id].add(new_entry)
-                        self.genes_to_tx[gene_id].add(transcript_id)
-        gtf.close()
+        self.chr_to_entry = defaultdict(lambda : defaultdict(set))
+        self.feature_type_summary = defaultdict(int)
+        self.transcript_type_summary = defaultdict(int)
+        self.add_gtf_data(gtf_file)
 
     def add_gtf_data(self, gtf_file):
         if gtf_file.endswith('.gz'):
-            gtf = gzip.open(self.gtf_file)
+            gtf = gzip.open(gtf_file)
         else:
-            gtf = open(self.gtf_file)
+            gtf = open(gtf_file)
         for line in gtf:
             if not line.startswith('#'):
                 new_entry = gtf_entry(line)
                 self.gtf_entries.append(new_entry)
+                self.feature_type_summary[new_entry.get_value('type')] += 1
+                self.transcript_type_summary[new_entry.get_value('transcript_type')] += 1
                 gene_id = new_entry.get_value('gene_id')
                 transcript_id = new_entry.get_value('transcript_id')
+                strand = new_entry.get_value('strand')
+                chromosome = new_entry.get_value('chr')
+                self.chr_to_entry[strand][chromosome].add(new_entry)
                 if gene_id != None:
                     self.gene_to_entries[gene_id].add(new_entry)
-                    print gene_id
                     if transcript_id != None:
                         self.transcript_to_entries[transcript_id].add(new_entry)
                         self.genes_to_tx[gene_id].add(transcript_id)
@@ -601,6 +591,20 @@ class gtf_data():
             out_gtf.write(transcript_entry.gtf_file_line)
         out_gtf.close()
 
+    def find_smallest_annotation_at_position(self, chr, strand, position, type_restrictions=None):
+        '''
+        Finds the smallest (smallest end-start) entry at a given position
+        :param chr: 
+        :param position: 
+        :return: 
+        '''
+        if type_restrictions == None:
+            entries = self.entries_by_position[chr][strand][position]
+        else:
+            entries = [entry for entry in self.entries_by_position[chr][strand][position]
+                       if entry.get_value('type') in type_restrictions]
+        sorted_by_length = sorted(entries, key=lambda x: (int(x.get_value('end')) - int(x.get_value('start'))))
+        return sorted_by_length[0]
 
 class gtf_entry():
     # note: levels 1 and 2 are verified and manually annotated, repectively, 3 are automatically annotated
@@ -651,4 +655,3 @@ class gtf_entry():
         """
         return genome_sequence.get_sequence(self.get_value('chr'), int(self.get_value('start')),
                                             int(self.get_value('end')), self.get_value('strand'))
-
