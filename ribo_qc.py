@@ -32,8 +32,8 @@ class ribo_qc:
         self.genome = ribo_utils.genome_sequence(self.experiment_settings.get_genome_sequence_files())
         self.GTF_annotations = ribo_utils.gtf_data(self.experiment_settings.get_annotation_GTF_file())
         self.lib_QCs = [single_lib_qc(self, lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
-        self.plot_rRNA_size_distributions()
-        #self.write_read_annotations_table()
+        #self.plot_rRNA_size_distributions()
+        self.plot_read_annotations_summary()
 
     def write_trimming_stats_summary(self):
         out_file = open(self.experiment_settings.get_trimming_count_summary(), 'w')
@@ -90,23 +90,22 @@ class ribo_qc:
         for qc_lib in self.lib_QCs:
             dict_list = [] # a list pf tuples that I wil later cast to a dict
             dict_list.append(('sample',qc_lib.lib_settings.sample_name))
+            dict_list.append(('reads processed', qc_lib.lib_settings.sample_name))
             dict_list.append(('short or low quality', qc_lib.adaptor_stats['reads processed'] - qc_lib.adaptor_stats['trimmed reads available'] ))
             for ncrna_reference in qc_lib.ncrna_reference_counts:
                 dict_list.append((ncrna_reference, qc_lib.ncrna_reference_counts[ncrna_reference]))
-
-
-
-
-            frag_dict = qc_lib.rrna_fragment_lengths
-            frag_lengths = sorted(frag_dict.keys())
-            frag_length_counts = [frag_dict[length] for length in frag_lengths]
-            d = {'fragment length': frag_lengths, '# reads': frag_length_counts,
-                 '% reads': 100. * np.array(frag_length_counts) / sum(frag_length_counts),
-                 'sample': [qc_lib.lib_settings.sample_name] * len(frag_length_counts)}
-            temp_df = pd.DataFrame(data=d)
+            for uniqueness in qc_lib.annotation_mapping_counts:
+                for annotation_type in qc_lib.annotation_mapping_counts[uniqueness]:
+                    dict_list.append((uniqueness+'_'+annotation_type, qc_lib.annotation_mapping_counts[uniqueness][annotation_type]))
+            temp_df = pd.DataFrame(data=dict(dict_list), index=[0])
             dfs.append(temp_df)
-        frag_length_df = pd.concat(dfs)
+        read_summary = pd.concat(dfs)
+        outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'read_annotation_summary.tsv')
+        read_summary.to_csv(outname, sep='\t')
 
+    def initialize_qc_lib(self, lib_settings):
+        if lib_settings.qc_pickle_exists():
+            return ribo_utils.unPickle(lib_settings.qc_pickle())
 
 class single_lib_qc():
     def __init__(self, parent_qc, lib_settings):
@@ -225,8 +224,6 @@ class single_lib_qc():
         self.lib_settings.write_to_log('making mapping annotation_summary for all mapping reads')
         self.annotation_mapping_counts = defaultdict(lambda : defaultdict(int))
         self.total_primary_alignments = 0
-        print self.genome_samfile.references
-        print sorted(self.parent_qc.GTF_annotations.chr_to_entry.keys())
         for chromosome in self.genome_samfile.references:
             self.lib_settings.write_to_log(chromosome)
             for alignment in self.genome_samfile.fetch(reference=chromosome):
