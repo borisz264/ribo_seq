@@ -174,14 +174,17 @@ class transcript:
 
     def assign_read_ends_from_sam(self, sam_file):
         all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
-        for read in [r for r in all_mapping_reads if (not r.is_secondary) and (not r.is_reverse)]:
-            #this alignment should be the primary one. IF this throws erros, I will need to write more logic.
-            assert (not read.is_reverse) and (not read.is_secondary)
-            fragment_start = read.reference_start #0-based start of fragment
+        reads_reversed = self.experiment_settings.get_property('reads_reversed')
+        for read in [r for r in all_mapping_reads if (not r.is_secondary) and (reads_reversed == r.is_reverse)]:
+            if reads_reversed:
+                fragment_start = read.reference_end
+                fragment_end = read.reference_start
+            else:
+                fragment_start = read.reference_start #0-based start of fragment
+                fragment_end = read.reference_end
             # get read length from sequence, or CIGAR string if unavailable
             fragment_length = read.infer_query_length(always=False)
             assert fragment_length != 0
-            fragment_end = fragment_start + fragment_length
             self.fragment_5p_ends_at_position[fragment_start] += 1
             self.fragment_3p_ends_at_position[fragment_end] += 1
             self.fragment_count += 1

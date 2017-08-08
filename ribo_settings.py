@@ -48,10 +48,10 @@ class ribo_settings:
 
         int_keys = ['comparison_read_cutoff', 'min_post_trimming_length', 'max_post_trimming_length',
                      'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity', 'outfiltermultimapnmax',
-                    'alignsjdboverhangmin', 'alignsjoverhangmin']
+                    'alignsjdboverhangmin', 'alignsjoverhangmin', 'five_prime_p_offset']
         #float_keys = []
-        str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'genome_sequence_dir', 'annotation_gtf_file']
-        boolean_keys = ['force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots']
+        str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'star_ncrna_dir', 'genome_sequence_dir', 'ncrna_sequence_dir', 'annotation_gtf_file']
+        boolean_keys = ['force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['genome_sequence_dir', 'annotation_gtf_file']
@@ -91,7 +91,12 @@ class ribo_settings:
                 print 'ERROR: nonexistent file ', file_handle
                 sys.exit()
         for k in extant_files:
-            assert ribo_utils.file_exists(settings[k])
+            try:
+                assert ribo_utils.file_exists(settings[k])
+            except AssertionError:
+                print 'file %s does not exist' % settings[k]
+                sys.exit()
+
         self.settings = settings
         self.rdir = settings['results_dir']
         ribo_utils.make_dir(self.rdir)
@@ -121,8 +126,16 @@ class ribo_settings:
         index = self.get_property('star_genome_dir')
         return index
 
+    def get_star_ncrna_dir(self):
+        index = self.get_property('star_ncrna_dir')
+        return index
+
     def get_genome_sequence_dir(self):
         genome_dir = self.get_property('genome_sequence_dir')
+        return genome_dir
+
+    def get_ncrna_sequence_dir(self):
+        genome_dir = self.get_property('ncrna_sequence_dir')
         return genome_dir
 
     def get_genome_sequence_files(self, allowed_endings=['.fa']):
@@ -227,16 +240,33 @@ class ribo_lib_settings:
            {'sample_name': self.sample_name})
         return trimming_log
 
-    def get_mapped_reads_prefix(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)s' % {'sample_name': self.sample_name})
+    def get_ncrna_mapped_reads_prefix(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'ncrna_mapped_reads',
+                                    '%(sample_name)s' % {'sample_name': self.sample_name})
         return mapped_reads
 
+    def get_genome_mapped_reads_prefix(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'genome_mapped_reads', '%(sample_name)s' % {'sample_name': self.sample_name})
+        return mapped_reads
+
+    def get_ncrna_mapped_reads(self):
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'ncrna_mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
+        return mapped_reads
+
+    def get_ncrna_unmapped_reads(self):
+        unmapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'ncrna_mapped_reads', '%(sample_name)sUnmapped.out.mate1' % {'sample_name': self.sample_name})
+        return unmapped_reads
+
+    def get_ncrna_most_common_reads(self):
+        unmapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'QC', '%(sample_name)s.common_ncrna_fragments.tsv' % {'sample_name': self.sample_name})
+        return unmapped_reads
+
     def get_genome_mapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'genome_mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
         return mapped_reads
 
     def get_transcript_mapped_reads(self):
-        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'mapped_reads', '%(sample_name)sAligned.toTranscriptome.out.bam' % {'sample_name': self.sample_name})
+        mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'genome_mapped_reads', '%(sample_name)sAligned.toTranscriptome.out.bam' % {'sample_name': self.sample_name})
         return mapped_reads
 
     def get_transcript_counts(self):
@@ -259,7 +289,11 @@ class ribo_lib_settings:
         trimmed_reads = self.get_trimmed_reads()
         return ribo_utils.file_exists(trimmed_reads)
 
-    def mapped_reads_exist(self):
+    def ncrna_mapped_reads_exist(self):
+        mapped_reads = self.get_ncrna_mapped_reads()
+        return ribo_utils.file_exists(mapped_reads)
+
+    def genome_mapped_reads_exist(self):
         mapped_reads = self.get_genome_mapped_reads()
         return ribo_utils.file_exists(mapped_reads)
 

@@ -112,7 +112,7 @@ def tsv_to_dict(filename, header = True, delimiter = '\t', key_column = 0, conve
             if not i == key_column:
                 if not convert_to_float:
                     return_dict[ll[key_column]][headers[i]]=ll[i]
-                elif is_float(ll[i]):
+                elif isinstance(ll[i], float):
                     return_dict[ll[key_column]][headers[i]]=float(ll[i])
     f.close()
     return return_dict
@@ -432,12 +432,24 @@ class genome_sequence():
 class gtf_data():
     def __init__(self, gtf_file):
         self.gtf_entries = []
+        self.fields = ['chr', 'source', 'type', 'start', 'end', 'score', 'strand', 'frame', 'additional']
+        # note: levels 1 and 2 are verified and manually annotated, repectively, 3 are automatically annotated
+        #self.additional_mandatory_keys = ['gene_id', 'transcript_id', 'gene_type', 'gene_status', 'gene_name',
+        #                                  'transcript_type', 'transcript_status', 'transcript_name', 'exon_number',
+        #                                  'exon_id', 'level']
         self.transcript_to_entries = defaultdict(set)
         self.gene_to_entries = defaultdict(set)
         self.genes_to_tx = defaultdict(set)
-        self.chr_to_entry = defaultdict(lambda : defaultdict(set))
         self.feature_type_summary = defaultdict(int)
         self.transcript_type_summary = defaultdict(int)
+        # for each location a read maps, will keep the entry for the shortest feature found there and it's type
+        self.shortest_annotations = {'+':defaultdict(lambda : defaultdict(dict)),
+                                     '-':defaultdict(lambda : defaultdict(dict))}
+        # a dict of {chromosome: {strand: {start and/or endposition, rounded DOWN to the nearest thousand: [entries overlapping this range, sorted, first by start position, then by length}}
+        # Each unit of 1000 (a mille) can also potentially entries with the neighboring ones
+        # So shorter entries will precede longer ones.
+        #I'm using integer division to do the rounding
+        self.chr_to_entry = defaultdict(lambda: defaultdict(lambda : defaultdict(list)))
         self.add_gtf_data(gtf_file)
 
     def add_gtf_data(self, gtf_file):
@@ -447,7 +459,7 @@ class gtf_data():
             gtf = open(gtf_file)
         for line in gtf:
             if not line.startswith('#'):
-                new_entry = gtf_entry(line)
+                new_entry = gtf_entry(line, self)
                 self.gtf_entries.append(new_entry)
                 self.feature_type_summary[new_entry.get_value('type')] += 1
                 self.transcript_type_summary[new_entry.get_value('transcript_type')] += 1
@@ -455,13 +467,20 @@ class gtf_data():
                 transcript_id = new_entry.get_value('transcript_id')
                 strand = new_entry.get_value('strand')
                 chromosome = new_entry.get_value('chr')
-                self.chr_to_entry[strand][chromosome].add(new_entry)
+                for position_bin in range(int(new_entry.get_value('start'))/1000*1000, (int(new_entry.get_value('end'))/1000*1000)+1000, 1000):
+                    self.chr_to_entry[chromosome][strand][position_bin].append(new_entry)
                 if gene_id != None:
                     self.gene_to_entries[gene_id].add(new_entry)
                     if transcript_id != None:
                         self.transcript_to_entries[transcript_id].add(new_entry)
                         self.genes_to_tx[gene_id].add(transcript_id)
+        self.gtf_entries = sorted(self.gtf_entries, key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end'))))
+        for chromosome in self.chr_to_entry:
+            for strand in self.chr_to_entry[chromosome]:
+                for position_bin in self.chr_to_entry[chromosome][strand]:
+                    self.chr_to_entry[chromosome][strand][position_bin] = sorted(self.chr_to_entry[chromosome][strand][position_bin], key=lambda x: (int(x.get_value('start')), int(x.get_value('end'))))
         gtf.close()
+
 
     def print_transcript_multiplicity(self, gene_type=None):
         self.tx_counts_histogram = defaultdict(int)
@@ -587,42 +606,80 @@ class gtf_data():
             for transcript_entry in self.transcript_to_entries[transcript_id]:
                 transcript_entries.append(transcript_entry)
         for transcript_entry in sorted(transcript_entries,
-                                       key=lambda x: (x.get_value('chr'), int(x.get_value('start')))):
+                                       key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end')))):
             out_gtf.write(transcript_entry.gtf_file_line)
         out_gtf.close()
 
-    def find_smallest_annotation_at_position(self, chr, strand, position, type_restrictions=None):
+    def find_annotations_overlapping_range(self, chromosome, strand, start_position, end_position, type_restrictions=None,
+                                           type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene']):
+        """
+        :param chromosome: 
+        :param strand: 
+        :param start_position: 
+        :param end_position: 
+        :param type_restrictions: 
+        :return: list of entries (shortest first) that overlap the given range in any way. Partially or completely. 
+        """
+        overlaps = []
+        for position_bin in range(int(start_position) / 1000 * 1000, (int(end_position) / 1000 * 1000) + 1000, 1000):
+            for entry in self.chr_to_entry[chromosome][strand][position_bin]:
+                if type_restrictions != None and entry.get_value('type') not in type_restrictions:
+                    continue
+                #The general overlap criterion
+                elif start_position <= int(entry.get_value('end')) and end_position >= int(entry.get_value('start')):
+                    overlaps.append(entry)
+                elif int(entry.get_value('start')) > end_position:
+                    return sorted(overlaps, key=lambda x: (x.length(), type_sorting_order.index(x.get_value('type'))))
+        return sorted(overlaps, key=lambda x: (type_sorting_order.index(x.get_value('type')), x.length()))
+
+    def find_smallest_annotation_at_position(self, chromosome, strand, start_position, end_position, type_restrictions=None,
+                                            type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene']):
         '''
         Finds the smallest (smallest end-start) entry at a given position
         :param chr: 
         :param position: 
         :return: 
         '''
-        if type_restrictions == None:
-            entries = self.entries_by_position[chr][strand][position]
+        if not (start_position in self.shortest_annotations[strand][chr] and  end_position in self.shortest_annotations[strand][chr][start_position]):
+            entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order)
+            if len(entries)>0:
+                self.shortest_annotations[strand][chr][start_position][end_position] = entries[0]
+            else:
+                self.shortest_annotations[strand][chr][start_position][end_position] = None
+        return self.shortest_annotations[strand][chr][start_position][end_position]
+
+    def utr_type(self, entry):
+        """
+        if the type of the given entry is "UTR", returns '5p_UTR' or '3p_UTR' as appropriate
+        :param entry: 
+        :return: 
+        """
+        if not entry.is_type('UTR'):
+            return None
         else:
-            entries = [entry for entry in self.entries_by_position[chr][strand][position]
-                       if entry.get_value('type') in type_restrictions]
-        sorted_by_length = sorted(entries, key=lambda x: (int(x.get_value('end')) - int(x.get_value('start'))))
-        return sorted_by_length[0]
+            transcript_id = entry.get_value('transcript_id')
+            cds_exons = self.sorted_exons(transcript_id, exon_type='CDS')
+            #print entry
+            #print cds_exons
+            if entry.get_value('strand') == '+' and int(entry.get_value('end')) < int(cds_exons[0].get_value('start')):
+                return '5p_UTR'
+            elif entry.get_value('strand') == '-' and int(entry.get_value('start')) > int(cds_exons[0].get_value('end')):
+                return '5p_UTR'
+            else:
+                return '3p_UTR'
 
 class gtf_entry():
-    # note: levels 1 and 2 are verified and manually annotated, repectively, 3 are automatically annotated
-    def __init__(self, gtf_file_line):
+    def __init__(self, gtf_file_line, parent_gtf):
         self.gtf_file_line = gtf_file_line
-        self.fields = ['chr', 'source', 'type', 'start', 'end', 'score', 'strand', 'frame', 'additional']
-        self.additional_mandatory_keys = ['gene_id', 'transcript_id', 'gene_type', 'gene_status', 'gene_name',
-                                          'transcript_type', 'transcript_status', 'transcript_name', 'exon_number',
-                                          'exon_id', 'level']
         ll = gtf_file_line.rstrip('\n').split('\t')
-        self.primary_data = dict(zip(self.fields, ll))
+        self.primary_data = dict(zip(parent_gtf.fields, ll))
         additional_pairs = self.primary_data['additional'].split('; ')
         self.secondary_data = dict([pair.split(' ') for pair in additional_pairs])
         for key in self.secondary_data:
             self.secondary_data[key] = self.secondary_data[key].strip('"')
 
     def __repr__(self):
-        return str(self.primary_data)
+        return self.gtf_file_line
 
     def is_type(self, entry_type):
         """

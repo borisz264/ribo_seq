@@ -24,15 +24,39 @@ class experiment:
         self.settings = settings
         self.settings.write_to_log('Initializing experiment %s' % self.settings.get_property('experiment_name'))
         self.num_libs = len([x for x in settings.iter_lib_settings()])
-        self.make_mapping_index()
+        self.make_ncRNA_mapping_index()
+        self.make_genome_mapping_index()
         self.trim_reads()
         self.remove_adaptor()
-        self.map_reads()
+        self.map_reads_to_ncrna()
+        self.map_reads_to_genome()
         self.perform_qc()
         #self.initialize_libs()
         self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
 
-    def make_mapping_index(self):
+
+    def make_ncRNA_mapping_index(self):
+        make_index = False
+        if ribo_utils.file_exists(self.settings.get_property('star_ncrna_dir')):
+            self.settings.write_to_log('STAR index exists at %s' % self.settings.get_property('star_ncrna_dir'))
+            if self.settings.get_property('rebuild_star_index'):
+                self.settings.write_to_log('STAR index rebuild forced')
+                make_index = True
+            else:
+                self.settings.write_to_log('using existing STAR index')
+        else:
+            make_index = True
+            ribo_utils.make_dir(self.settings.get_property('star_ncrna_dir'))
+        if make_index:
+            self.settings.write_to_log('building STAR index')
+            command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --genomeSAsparseD %d 1>>%s 2>>%s' % (
+                self.threads, self.settings.get_property('star_ncrna_dir'), self.settings.get_ncrna_sequence_dir(), 1,
+                self.settings.get_log(), self.settings.get_log())
+            self.settings.write_to_log(command_to_run)
+            subprocess.Popen(command_to_run, shell=True).wait()
+        self.settings.write_to_log('STAR index ready')
+
+    def make_genome_mapping_index(self):
         make_index = False
         if ribo_utils.file_exists(self.settings.get_property('star_genome_dir')):
             self.settings.write_to_log('STAR index exists at %s' % self.settings.get_property('star_genome_dir'))
@@ -132,37 +156,84 @@ class experiment:
         subprocess.Popen(compression_command, shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
 
-    def map_reads(self):
+    def map_reads_to_ncrna(self):
         """
         map all reads using bowtie
         :return:
         """
         if not self.settings.get_property('force_remapping'):
             for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.mapped_reads_exist():
+                if not lib_settings.genome_mapped_reads_exist():
                     break
             else:
-                self.settings.write_to_log('using existing mapped reads')
+                self.settings.write_to_log('using existing noncoding RNA mapped reads')
                 return
         else:
             self.settings.write_to_log('remapping forced')
         self.settings.write_to_log('mapping reads')
-        ribo_utils.make_dir(self.rdir_path('mapped_reads'))
-        map(lambda lib_setting: self.map_one_library(lib_setting, self.threads), self.settings.iter_lib_settings())
-        self.settings.write_to_log( 'finished mapping reads')
+        ribo_utils.make_dir(self.rdir_path('ncrna_mapped_reads'))
+        map(lambda lib_setting: self.map_one_library_to_rrna(lib_setting, self.threads), self.settings.iter_lib_settings())
+        self.settings.write_to_log( 'finished mapping reads to noncoding RNA')
 
-    def map_one_library(self, lib_settings, threads):
+    def map_one_library_to_rrna(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
+                         '--outSAMtype BAM SortedByCoordinate --outFilterMultimapNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s ' \
+                         '--outReadsUnmapped Fastx 1>>%s 2>>%s' %\
+                         (threads, self.settings.get_star_ncrna_dir(),
+                          lib_settings.get_adaptor_trimmed_reads(),
+                          self.settings.get_property('outfiltermultimapnmax'),
+                          lib_settings.get_ncrna_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
+        #sort transcript-mapped bam file
+        #command_to_run = 'samtools sort %s -o %s.temp_sorted.bam 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
+        #                                                                  lib_settings.get_log(), lib_settings.get_log())
+        #lib_settings.write_to_log(command_to_run)
+        #subprocess.Popen(command_to_run, shell=True).wait()
+        #command_to_run = 'mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
+        #                                                                  lib_settings.get_transcript_mapped_reads())
+        #lib_settings.write_to_log(command_to_run)
+        #subprocess.Popen(command_to_run, shell = True).wait()
+        #command_to_run = 'samtools index %s' % (lib_settings.get_transcript_mapped_reads())
+        #lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell = True).wait()
+        command_to_run = 'samtools index %s' % (lib_settings.get_ncrna_mapped_reads())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
+        lib_settings.write_to_log('mapping_reads done')
+
+    def map_reads_to_genome(self):
+        """
+        map all reads using bowtie
+        :return:
+        """
+        if not self.settings.get_property('force_remapping'):
+            for lib_settings in self.settings.iter_lib_settings():
+                if not lib_settings.genome_mapped_reads_exist():
+                    break
+            else:
+                self.settings.write_to_log('using existing genome-mapped reads')
+                return
+        else:
+            self.settings.write_to_log('remapping forced')
+        self.settings.write_to_log('mapping reads to genome')
+        ribo_utils.make_dir(self.rdir_path('genome_mapped_reads'))
+        map(lambda lib_setting: self.map_one_library_to_genome(lib_setting, self.threads), self.settings.iter_lib_settings())
+        self.settings.write_to_log( 'finished mapping reads to genome')
+
+    def map_one_library_to_genome(self, lib_settings, threads):
+        lib_settings.write_to_log('mapping_reads')
+        command_to_run = 'STAR --runThreadN %d --genomeDir %s --readFilesIn %s ' \
                          '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin %d --alignSJoverhangMin %d ' \
                          '--outFilterType BySJout --outFilterMultimapNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
-                         ' --quantMode TranscriptomeSAM --outReadsUnmapped FastX 1>>%s 2>>%s' %\
+                         ' --quantMode TranscriptomeSAM --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(),
-                          lib_settings.get_adaptor_trimmed_reads(),
+                          lib_settings.get_ncrna_unmapped_reads(),
                           self.settings.get_property('alignsjdboverhangmin'),
                           self.settings.get_property('alignsjoverhangmin'),
                           self.settings.get_property('outfiltermultimapnmax'),
-                          lib_settings.get_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
+                          lib_settings.get_genome_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
         #sort transcript-mapped bam file
