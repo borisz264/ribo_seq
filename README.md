@@ -4,16 +4,9 @@ for mapping of ribosome footprints to a mammalian transcriptome using STAR
 
 ## Getting Started
 *   Download all of the dependencies and make sure they are in your PATH or PYTHONPATH respectively
-*   Make a STAR mapping index for your transcriptome of interest. A full human or mouse genome index require 64Gb of RAM to run.
-*   Set --genomeSAsparseD to 2 for a 32Gb system, 3 for 16, and so on. This will increase run time, but it's still faster than bowtie.
-*   Make tab-delimited annotation files. Pick a single transcript isoform for each gene (usually the longest coding sequence):
-all_coding_Transcripts.tsv : all starts and ends are relative to transcript start site (which is indexed as zero)
-tx_id	strand	tx_length	exon_starts	tx_exon_ends	cdsStart	cdsEnd	cdsSeq	geneID	notes
-uc007aho.1	-	3526	0,184	183,3525	95	488	ATGAAGTTTTTAGAGAAAGGAGAGCTTGCAAACTTCAGATTCCAAAAGGATTTCTTACGACCTTTTGAACATATAATGAAACGAAACAGGTCTCCAACAATTCGAGATATGGTTGTACGGTGTATAGCACAAATGGTTAATTCTCAGGCTGCAAATATTCGTTCAGGATGGAAGAACATTTTCTCAGTATTCCATCTAGCTGCATCAGACCAAGATGAAAGCATAGTAGAACTTGCATTTCAGACAACAGGGCACATTGTCAGTAAGTATTTTTTAACTATTCAAGTGCAAATAGAAAAGCTGGATGTACTTAGTTGGCAAATGAGGTGCAGTAAGATTATGACTGTAGTATGGCTTTTAGACTTACAAATGTTGTTTTTAAAACTAGAGTGA
-all_coding_transcripts.fa: fasta file of coding transcript sequences. names must mathc tx_id in above files.
-```
-STAR --runThreadN 8 --runMode genomeGenerate --genomeDir mm10_STAR --genomeFastaFiles mm10/mm10.fa --sjdbGTFfile mm10/20170628_known_canonical.gtf --genomeSAsparseD 2
-```
+*   Assemble your genome FASTA files into a single folder.
+*   Assemble FASTA files of noncoding RNA into a different folder. it is recommended that rRNA have 'rRNA' int he sequence names, and tRNAs have 'tRNA' or 'MT' in the sequence names.
+*   Make sure the FASTA files are uncompressed and end in .fa (sorry STAR compiler doesn't seem to do compression)
 *   gzip your fastq files and put them in one folder
 *   make a settings file for your experiment. An example file is included, and an annotated version is included, as comments are not allowed in json files.
 
@@ -31,4 +24,3 @@ Python dependencies (for python 2.7) installed with pip install (on mac, a local
 *    matplotlib (2.0.2)
 *    seaborn (0.8)
 *    pysam (0.11.2.2)
-
