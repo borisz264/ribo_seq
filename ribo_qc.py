@@ -28,6 +28,7 @@ class ribo_qc:
         self.genome = ribo_utils.genome_sequence(self.experiment_settings.get_genome_sequence_files())
         self.GTF_annotations = ribo_utils.gtf_data(self.experiment_settings.get_annotation_GTF_file())
         self.lib_QCs = [self.initialize_qc_lib(lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
+        #TODO: libraries need not be initiated if the proper intermediate TSV files exist
         self.plot_rRNA_size_distributions()
         self.plot_read_annotations_summary()
         self.plot_read_annotations_summary(mapped_only=True)
@@ -213,8 +214,6 @@ class ribo_qc:
         # plt.subplots_adjust(bottom=0.38, right=0.8)
         plt.savefig(outName, transparent=True)
 
-
-
     def initialize_qc_lib(self, lib_settings):
         #if lib_settings.qc_pickle_exists():
         #    lib_settings.write_to_log('existing QC counts found, unpickling %s' % lib_settings.get_qc_pickle())
@@ -262,7 +261,7 @@ class single_lib_qc():
                             self.ncrna_sequence_multiplicities[alignment.query_sequence]['count'] = 1
         out_file = open(self.lib_settings.get_ncrna_most_common_reads(), 'w')
 
-        for sequence in sorted(self.ncrna_sequence_multiplicities.keys(), key=lambda x:self.ncrna_sequence_multiplicities[x]['count'], reverse=True):
+        for sequence in sorted(self.ncrna_sequence_multiplicities.keys(), key=lambda x:self.ncrna_sequence_multiplicities[x]['count'], reverse=True)[:100]:
             out_file.write('%s\t%s\t%d\n' % (self.ncrna_sequence_multiplicities[sequence]['reference'], sequence, self.ncrna_sequence_multiplicities[sequence]['count']))
         out_file.close()
         self.lib_settings.write_to_log('done counting rrna-mapped reads')
