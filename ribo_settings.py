@@ -102,7 +102,6 @@ class ribo_settings:
         ribo_utils.make_dir(self.rdir)
         shutil.copy(settings_file, self.rdir)
 
-
     def get_log(self):
         log = os.path.join(
           self.get_rdir(),
