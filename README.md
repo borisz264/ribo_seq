@@ -10,6 +10,8 @@ for mapping of ribosome footprints to a mammalian transcriptome using STAR
 *   gzip your fastq files and put them in one folder
 *   make a settings file for your experiment. An example file is included, and an annotated version is included, as comments are not allowed in json files.
 
+*   If you change a parameter and restart the pipeline, it is best to delete all of the output, or at least all of the output past the affected point. Otherwise the pipeline will use your old intermediates.
+
 ### Prerequisites
 Dependencies
 *    skewer read adaptor trimmer downloaded and added to path (https://github.com/relipmoc/skewer) (0.2.2 tested)
