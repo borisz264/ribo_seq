@@ -25,7 +25,7 @@ outfiltermultimapnmax = 20 #anything that maps to more than this many places is 
 alignsjdboverhangmin = 1
 alignsjoverhangmin = 8
 force_remapping = False
-reads_reversed = False
+reads_reversed = False #set this to true if your reads are expected to be the reverse-complement of the transcript sequence. We find this to be true for Illumina Tru-Seq kits.
 
 [ output_parameters ]
 comparison_read_cutoff = 128
