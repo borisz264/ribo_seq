@@ -4,18 +4,14 @@ import matplotlib.pyplot as plt
 import uniform_colormaps
 
 plt.rcParams['pdf.fonttype'] = 42
-import scipy.stats as stats
 import os
 import ribo_utils
 import numpy as np
-import itertools
-import math
-import gzip
 import pysam
 import pandas as pd
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy
 
 class ribo_qc:
     def __init__(self, experiment, experiment_settings, threads):
@@ -31,9 +27,10 @@ class ribo_qc:
         ribo_utils.make_dir(self.experiment.rdir_path('QC'))
         self.genome = ribo_utils.genome_sequence(self.experiment_settings.get_genome_sequence_files())
         self.GTF_annotations = ribo_utils.gtf_data(self.experiment_settings.get_annotation_GTF_file())
-        self.lib_QCs = [single_lib_qc(self, lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
-        #self.plot_rRNA_size_distributions()
+        self.lib_QCs = [self.initialize_qc_lib(lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
+        self.plot_rRNA_size_distributions()
         self.plot_read_annotations_summary()
+        self.plot_read_annotations_summary(mapped_only=True)
 
     def write_trimming_stats_summary(self):
         out_file = open(self.experiment_settings.get_trimming_count_summary(), 'w')
@@ -73,7 +70,7 @@ class ribo_qc:
             dfs.append(temp_df)
         frag_length_df = pd.concat(dfs)
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'rRNA_fragment_sizes.tsv')
-        frag_length_df.to_csv(outname, sep='\t')
+        frag_length_df.to_csv(outname, sep='\t', index_label=False)
         sns.set(style="white", color_codes=True, font_scale=1)
         sns.set_style("ticks", {"xtick.major.size": 3, "xtick.minor.size": 2, "ytick.major.size": 2})
         g = sns.factorplot(x='fragment length', y='% reads', hue="sample", data=frag_length_df, legend_out=True,
@@ -85,27 +82,148 @@ class ribo_qc:
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'rRNA_fragment_sizes_multi_plot.pdf')
         g.savefig(outname, transparent=True)
 
-    def plot_read_annotations_summary(self):
+    def plot_read_annotations_summary(self, mapped_only=False, representation_cutoff = 1):
         dfs = []
         for qc_lib in self.lib_QCs:
             dict_list = [] # a list pf tuples that I wil later cast to a dict
             dict_list.append(('sample',qc_lib.lib_settings.sample_name))
-            dict_list.append(('reads processed', qc_lib.lib_settings.sample_name))
-            dict_list.append(('short or low quality', qc_lib.adaptor_stats['reads processed'] - qc_lib.adaptor_stats['trimmed reads available'] ))
+            dict_list.append(('reads processed', qc_lib.adaptor_stats['reads processed']))
+            dict_list.append(('<%d nt' % (self.get_property('min_post_trimming_length')), qc_lib.adaptor_stats['reads processed'] - qc_lib.adaptor_stats['trimmed reads available']))
             for ncrna_reference in qc_lib.ncrna_reference_counts:
                 dict_list.append((ncrna_reference, qc_lib.ncrna_reference_counts[ncrna_reference]))
             for uniqueness in qc_lib.annotation_mapping_counts:
                 for annotation_type in qc_lib.annotation_mapping_counts[uniqueness]:
                     dict_list.append((uniqueness+'_'+annotation_type, qc_lib.annotation_mapping_counts[uniqueness][annotation_type]))
-            temp_df = pd.DataFrame(data=dict(dict_list), index=[0])
+            temp_df = pd.DataFrame(data=dict(dict_list), index=[qc_lib.lib_settings.sample_name])
             dfs.append(temp_df)
         read_summary = pd.concat(dfs)
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'read_annotation_summary.tsv')
-        read_summary.to_csv(outname, sep='\t')
+        read_summary.to_csv(outname, sep='\t', index_label=False)
+
+        #now lets assemble the info we'll need for making the stacked bar graph.
+        #first consolidate the tRNA data
+        consolidated_summary = pd.DataFrame()
+        tRNA_headers = []
+        rRNA_headers = []
+        for header in list(read_summary.columns.values):
+            if 'tRNA' in header or 'MT' in header:
+                tRNA_headers.append(header)
+            elif 'rRNA' in header:
+                rRNA_headers.append(header)
+            else:
+                consolidated_summary[header] = read_summary[header]
+
+        consolidated_summary['tRNA'] = read_summary[tRNA_headers].sum(axis=1)
+        consolidated_summary['rRNA'] = read_summary[rRNA_headers].sum(axis=1)
+        outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'consolidated_read_annotation_summary.tsv')
+        consolidated_summary.to_csv(outname, sep='\t', index_label=False)
+        consolidated_percent_summary = consolidated_summary[
+            [header for header in sorted(list(consolidated_summary.columns.values)) if header != 'sample']].div(
+            consolidated_summary['reads processed'], axis='index')
+        consolidated_percent_summary = consolidated_percent_summary.apply(lambda x: x * 100.)
+        consolidated_percent_summary['sample'] = consolidated_summary['sample']
+        outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'consolidated_percent_read_annotation_summary.tsv')
+        consolidated_percent_summary.to_csv(outname, sep='\t', index_label=False)
+        top_summary = pd.DataFrame()
+        totals = consolidated_percent_summary.sum()  # sum each column
+        multi_totals = {}
+        unique_totals = {}
+        for header in list(consolidated_summary.columns.values):
+            sp = header.split(' mapping')
+            if sp[0] == 'multiple':
+                multi_totals[header] = totals[header]
+            elif sp[0] == 'unique':
+                unique_totals[header] = totals[header]
+        #sort into annotations that are represented above a certain percentage
+        top_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if multi_totals[anno]>=representation_cutoff]
+        other_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if multi_totals[anno]<representation_cutoff]
+        top_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if unique_totals[anno]>=representation_cutoff]
+        other_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if unique_totals[anno]<representation_cutoff]
+        for header in list(consolidated_percent_summary.columns.values):
+            if 'mapping' in header:
+                if header in top_multi or header in top_unique:
+                    top_summary[header] = consolidated_percent_summary[header]
+            else:
+                top_summary[header] = consolidated_percent_summary[header]
+
+        top_summary['multiple other'] = consolidated_percent_summary[other_multi].sum(axis=1)
+        top_summary['unique other'] = consolidated_percent_summary[other_unique].sum(axis=1)
+
+        top_summary['unmapped'] = top_summary['reads processed'] - consolidated_percent_summary[
+            [header for header in list(consolidated_percent_summary.columns.values) if header != 'reads processed']].sum(
+            axis=1)
+        del top_summary['reads processed']
+
+        outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'top_read_annotation_summary.tsv')
+        top_summary.to_csv(outname, sep='\t')
+
+        if mapped_only:
+            del top_summary['unmapped']
+            del top_summary['<%d nt' % (self.get_property('min_post_trimming_length'))]
+            top_summary = top_summary[
+                [header for header in sorted(list(top_summary.columns.values)) if header != 'sample']].div(
+                top_summary.sum(axis=1), axis='index')
+            top_summary = top_summary.apply(lambda x: x * 100.)
+            top_summary['sample'] = consolidated_percent_summary['sample']
+
+        # now, we will want to sort these by abundance again
+        avg = top_summary.mean()
+        avg.sort_values(inplace=True, ascending=False)
+        ind = numpy.arange(len(top_summary))  # the x locations for the groups
+        width = 0.8  # the width of the bars: can also be len(x) sequence
+        plotLayers = []
+        bottoms = [0] * len(top_summary)
+        bottoms = numpy.array(bottoms)
+
+        fig = plt.figure(figsize=(8, 8))
+        num_plots_wide = 1
+        num_plots_high = 1
+        plot = fig.add_subplot(num_plots_high, num_plots_wide, 1)
+
+        hatch_index = 1
+        unhatch_index = 1
+        for anno_type, val in avg.iteritems():
+            if 'multiple' in anno_type:
+                plotLayers.append(plot.bar(ind, top_summary[anno_type].values, width, bottom=bottoms,
+                                           color=ribo_utils.colors[hatch_index % len(ribo_utils.colors)],
+                                           label=anno_type, hatch='////'))
+                hatch_index += 1
+            else:
+                plotLayers.append(plot.bar(ind, top_summary[anno_type].values, width, bottom=bottoms,
+                                           color=ribo_utils.colors[unhatch_index % len(ribo_utils.colors)],
+                                           label=anno_type, hatch=None))
+                unhatch_index += 1
+            bottoms = bottoms + numpy.array(top_summary[anno_type].values)
+
+        plt.ylabel('percent of reads')
+        plt.title('summary of read loss in pipeline')
+        plot.set_xticks(ind)
+        plot.set_xticklabels(top_summary['sample'].values, rotation=85)
+        plt.tight_layout()
+        # Shrink current axis by 40%
+        box = plot.get_position()
+        plot.set_position([box.x0, box.y0, box.width * 0.6, box.height])
+        # Put a legend to the right of the current axis
+        plot.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plot.set_ylim(0, 100)
+        if mapped_only:
+            outName=os.path.join(self.experiment_settings.get_rdir(), 'QC', 'read_loss_summary_mapped.pdf')
+        else:
+            outName = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'read_loss_summary.pdf')
+        # plt.subplots_adjust(bottom=0.38, right=0.8)
+        plt.savefig(outName, transparent=True)
+
+
 
     def initialize_qc_lib(self, lib_settings):
-        if lib_settings.qc_pickle_exists():
-            return ribo_utils.unPickle(lib_settings.qc_pickle())
+        #if lib_settings.qc_pickle_exists():
+        #    lib_settings.write_to_log('existing QC counts found, unpickling %s' % lib_settings.get_qc_pickle())
+        #    return ribo_utils.unPickle(lib_settings.get_qc_pickle())
+        #else:
+        #    lib_settings.write_to_log('no existing QC counts found, counting')
+        #    lib = single_lib_qc(self, lib_settings)
+        #    ribo_utils.makePickle(lib, lib_settings.get_qc_pickle())
+        return single_lib_qc(self, lib_settings)
 
 class single_lib_qc():
     def __init__(self, parent_qc, lib_settings):
@@ -118,7 +236,6 @@ class single_lib_qc():
         self.ncrna_samfile = pysam.AlignmentFile(self.lib_settings.get_ncrna_mapped_reads(), "rb")
         self.count_ncrna_mapping_reads()
         self.ncrna_samfile.close()
-
         self.genome_samfile = pysam.AlignmentFile(self.lib_settings.get_genome_mapped_reads(), "rb")
         #self.get_mapping_multiplicity_stats()
         self.get_mapping_annotation_summary()
@@ -144,6 +261,7 @@ class single_lib_qc():
                             self.ncrna_sequence_multiplicities[alignment.query_sequence]['reference'] = reference
                             self.ncrna_sequence_multiplicities[alignment.query_sequence]['count'] = 1
         out_file = open(self.lib_settings.get_ncrna_most_common_reads(), 'w')
+
         for sequence in sorted(self.ncrna_sequence_multiplicities.keys(), key=lambda x:self.ncrna_sequence_multiplicities[x]['count'], reverse=True):
             out_file.write('%s\t%s\t%d\n' % (self.ncrna_sequence_multiplicities[sequence]['reference'], sequence, self.ncrna_sequence_multiplicities[sequence]['count']))
         out_file.close()
