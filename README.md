@@ -14,15 +14,15 @@ for mapping of ribosome footprints to a mammalian transcriptome using STAR
 
 ## running pipeline
 `python ribo_seq_main.py /path/to/settings.json.txt`
-<p>
+
+
 This will run the basic read trimming and mapping
-</p>
 
 #### Optional Parameters
-**--threads**   Specify number of threads to use. Default is 8. <br>
-**--make-tables**   If specified, will output all tables (read coutns, RPKMs, etc) <br>
-**--make-plots**    If specified, will output all plots <br>
-**--all-tasks**     Same as specifiying both --make-plots and --make-tables
+* **--threads**   Specify number of threads to use. Default is 8.
+* **--make-tables**   If specified, will output all tables (read coutns, RPKMs, etc)
+* **--make-plots**    If specified, will output all plots
+* **--all-tasks**     Same as specifiying both --make-plots and --make-tables
 
 ## Prerequisites
 #### Dependencies
