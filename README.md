@@ -12,17 +12,17 @@ for mapping of ribosome footprints to a mammalian transcriptome using STAR
 
 *   If you change a parameter and restart the pipeline, it is best to delete all of the output, or at least all of the output past the affected point. Otherwise the pipeline will use your old intermediates.
 
-### Prerequisites
-Dependencies
-*    skewer read adaptor trimmer downloaded and added to path (https://github.com/relipmoc/skewer) (0.2.2 tested)
-*    STAR RNA-seq aligner downlaoded and added to path (tested versionSTAR 020201)
-*    samtools (http://www.htslib.org/ version 1.5 tested) compiled and added to path (make install may do this automatically)
-*    FASTX-toolkit (http://hannonlab.cshl.edu/fastx_toolkit/) tested with 0.0.14
+## Prerequisites
+#### Dependencies
+*   skewer read adaptor trimmer downloaded and added to path (https://github.com/relipmoc/skewer) (0.2.2 tested)
+*   STAR RNA-seq aligner downlaoded and added to path (tested versionSTAR 020201)
+*   samtools (http://www.htslib.org/ version 1.5 tested) compiled and added to path (make install may do this automatically)
+*   FASTX-toolkit (http://hannonlab.cshl.edu/fastx_toolkit/) tested with 0.0.14
 
-Python dependencies (for python 2.7) installed with pip install (on mac, a local install with --user may be recommended)
-*    simplejson (3.11.1)
-*    numpy (1.13.1)
-*    scipy (0.19.1)
-*    matplotlib (2.0.2)
-*    seaborn (0.8)
-*    pysam (0.11.2.2)
+#### Python dependencies (for python 2.7) installed with pip install (on mac, a local install with --user may be recommended)
+*   simplejson (3.11.1)
+*   numpy (1.13.1)
+*   scipy (0.19.1)
+*   matplotlib (2.0.2)
+*   seaborn (0.8)
+*   pysam (0.11.2.2)
