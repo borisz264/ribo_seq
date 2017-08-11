@@ -12,6 +12,20 @@ for mapping of ribosome footprints to a mammalian transcriptome using STAR
 
 *   If you change a parameter and restart the pipeline, it is best to delete all of the output, or at least all of the output past the affected point. Otherwise the pipeline will use your old intermediates.
 
+## running pipeline
+<code>
+python ribo_seq_main.py /path/to/settings.json.txt
+</code>
+<p>
+This will run the basic read trimming and mapping
+</p>
+
+#### Optional Parameters
+<b>--threads</b>        Specify number of threads to use. Default is 8. <br>
+<b>--make-tables</b>    If specified, will output all tables (read coutns, RPKMs, etc)
+<b>--make-plots</b>    If specified, will output all plots <br>
+<b>--all-tasks</b>    Same as specifiying both --make-plots and --make-tables
+
 ## Prerequisites
 #### Dependencies
 *   skewer read adaptor trimmer downloaded and added to path (https://github.com/relipmoc/skewer) (0.2.2 tested)
