@@ -14,9 +14,6 @@ import ribo_lib
 import ribo_qc
 import ribo_plotting
 import ribo_tables
-from collections import defaultdict
-import numpy as np
-import scipy.stats as stats
 
 class experiment:
     def __init__(self, settings, threads):
@@ -30,10 +27,12 @@ class experiment:
         self.remove_adaptor()
         self.map_reads_to_ncrna()
         self.map_reads_to_genome()
-        self.perform_qc()
+        self.settings.write_to_log('loading genome sequence')
+        self.genome = ribo_utils.genome_sequence(self.settings.get_genome_sequence_files())
+        self.settings.write_to_log('loading GTF annotations')
+        self.GTF_annotations = ribo_utils.gtf_data(self.settings.get_annotation_GTF_file())
         #self.initialize_libs()
         self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
-
 
     def make_ncRNA_mapping_index(self):
         make_index = False
@@ -49,8 +48,8 @@ class experiment:
             ribo_utils.make_dir(self.settings.get_property('star_ncrna_dir'))
         if make_index:
             self.settings.write_to_log('building STAR index')
-            command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --genomeSAsparseD %d 1>>%s 2>>%s' % (
-                self.threads, self.settings.get_property('star_ncrna_dir'), self.settings.get_ncrna_sequence_dir(), 1,
+            command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --genomeSAsparseD %d  --genomeSAindexNbases %d 1>>%s 2>>%s' % (
+                self.threads, self.settings.get_property('star_ncrna_dir'), self.settings.get_ncrna_sequence_dir(), 1, 6,
                 self.settings.get_log(), self.settings.get_log())
             self.settings.write_to_log(command_to_run)
             subprocess.Popen(command_to_run, shell=True).wait()
@@ -257,6 +256,9 @@ class experiment:
         self.settings.write_to_log('performing QC')
         qc_engine = ribo_qc.ribo_qc(self, self.settings, self.threads)
         qc_engine.write_trimming_stats_summary()
+        qc_engine.plot_rRNA_size_distributions()
+        qc_engine.plot_read_annotations_summary()
+        qc_engine.plot_read_annotations_summary(mapped_only=True)
         self.settings.write_to_log('done QC')
 
     def initialize_libs(self):
@@ -264,8 +266,7 @@ class experiment:
         ribo_utils.make_dir(self.rdir_path('transcript_counts'))
         self.libs = []
 
-        ribo_utils.parmap(lambda lib_settings: ribo_lib.assign_tx_reads(self.settings, lib_settings),
-                          self.settings.iter_lib_settings(), nprocs=self.threads)
+        map(lambda lib_settings: ribo_lib.assign_tx_reads(self, self.settings, lib_settings), self.settings.iter_lib_settings())
         map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
         self.settings.write_to_log('initializing libraries, counting reads, done')
 
@@ -370,6 +371,13 @@ def main():
     settings = ribo_settings.ribo_settings(args.settings_file)
     ribo_experiment = experiment(settings, args.threads)
     print 'experiment ready'
+
+    if args.perform_qc or args.all_tasks:
+        print 'performing QC'
+        settings.write_to_log('performing QC')
+        ribo_experiment.perform_qc()
+        settings.write_to_log('done performing QC')
+
     if args.make_tables or args.all_tasks:
         print 'tables'
         settings.write_to_log('making tables')

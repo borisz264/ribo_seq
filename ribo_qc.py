@@ -26,9 +26,6 @@ class ribo_qc:
         self.GTF_annotations = self.experiment.GTF_annotations
         self.lib_QCs = [self.initialize_qc_lib(lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
         #TODO: libraries need not be initiated if the proper intermediate TSV files exist
-        self.plot_rRNA_size_distributions()
-        self.plot_read_annotations_summary()
-        self.plot_read_annotations_summary(mapped_only=True)
 
     def write_trimming_stats_summary(self):
         out_file = open(self.experiment_settings.get_trimming_count_summary(), 'w')
