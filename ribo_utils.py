@@ -472,7 +472,7 @@ class gtf_data():
                 self.tx_to_strand[transcript_id] = strand
                 chromosome = new_entry.get_value('chr')
                 self.tx_to_chr[transcript_id] = chromosome
-                for position_bin in range(int(new_entry.get_value('start'))/10000*10000, (int(new_entry.get_value('end'))/10000*10000)+10000, 10000):
+                for position_bin in range(int(new_entry.get_value('start'))/1000*1000, (int(new_entry.get_value('end'))/1000*1000)+1000, 1000):
                     self.chr_to_entry[chromosome][strand][position_bin].append(new_entry)
                     assert len(self.chr_to_entry[chromosome][strand][position_bin]) == len(set(self.chr_to_entry[chromosome][strand][position_bin]))
                 if gene_id != None:
