@@ -4,7 +4,7 @@ import itertools
 import gzip
 import numpy as np
 from scipy import stats
-import cPickle as pickle
+import dill as pickle
 import math
 import multiprocessing
 from collections import defaultdict
@@ -440,6 +440,9 @@ class gtf_data():
         self.transcript_to_entries = defaultdict(set)
         self.gene_to_entries = defaultdict(set)
         self.genes_to_tx = defaultdict(set)
+        self.tx_to_genes = {}
+        self.tx_to_strand = {}
+        self.tx_to_chr = {}
         self.feature_type_summary = defaultdict(int)
         self.transcript_type_summary = defaultdict(int)
         # for each location a read maps, will keep the entry for the shortest feature found there and it's type
@@ -451,7 +454,6 @@ class gtf_data():
         #I'm using integer division to do the rounding
         self.chr_to_entry = defaultdict(lambda: defaultdict(lambda : defaultdict(list)))
         self.add_gtf_data(gtf_file)
-
     def add_gtf_data(self, gtf_file):
         if gtf_file.endswith('.gz'):
             gtf = gzip.open(gtf_file)
@@ -465,22 +467,25 @@ class gtf_data():
                 self.transcript_type_summary[new_entry.get_value('transcript_type')] += 1
                 gene_id = new_entry.get_value('gene_id')
                 transcript_id = new_entry.get_value('transcript_id')
+                self.tx_to_genes[transcript_id] = gene_id
                 strand = new_entry.get_value('strand')
+                self.tx_to_strand[transcript_id] = strand
                 chromosome = new_entry.get_value('chr')
-                for position_bin in range(int(new_entry.get_value('start'))/1000*1000, (int(new_entry.get_value('end'))/1000*1000)+1000, 1000):
+                self.tx_to_chr[transcript_id] = chromosome
+                for position_bin in range(int(new_entry.get_value('start'))/10000*10000, (int(new_entry.get_value('end'))/10000*10000)+10000, 10000):
                     self.chr_to_entry[chromosome][strand][position_bin].append(new_entry)
+                    assert len(self.chr_to_entry[chromosome][strand][position_bin]) == len(set(self.chr_to_entry[chromosome][strand][position_bin]))
                 if gene_id != None:
                     self.gene_to_entries[gene_id].add(new_entry)
                     if transcript_id != None:
                         self.transcript_to_entries[transcript_id].add(new_entry)
                         self.genes_to_tx[gene_id].add(transcript_id)
-        self.gtf_entries = sorted(self.gtf_entries, key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end'))))
+        self.gtf_entries.sort(key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end'))))
         for chromosome in self.chr_to_entry:
             for strand in self.chr_to_entry[chromosome]:
                 for position_bin in self.chr_to_entry[chromosome][strand]:
-                    self.chr_to_entry[chromosome][strand][position_bin] = sorted(self.chr_to_entry[chromosome][strand][position_bin], key=lambda x: (int(x.get_value('start')), int(x.get_value('end'))))
+                    self.chr_to_entry[chromosome][strand][position_bin].sort(key=lambda x: (int(x.get_value('start')), int(x.get_value('end'))))
         gtf.close()
-
 
     def print_transcript_multiplicity(self, gene_type=None):
         self.tx_counts_histogram = defaultdict(int)
@@ -490,6 +495,151 @@ class gtf_data():
         for count in sorted(self.tx_counts_histogram.keys()):
             print count, self.tx_counts_histogram[count]
 
+    def tx_with_longest_CDS(self, gene_id, starting_subset=None):
+        """
+        starting_subset can be a list of transcript ids. If it is given, then only those transcripts will be considered
+        """
+        if starting_subset == None:
+            transcripts = self.genes_to_tx[gene_id]
+        else:
+            transcripts = starting_subset
+        if len(transcripts) == 1:
+            return [sorted(transcripts)[0]]
+        else:
+            sorted_transcripts = sorted(transcripts,
+                                        key=lambda x: int(self.spliced_length(x, exon_type=['CDS', 'stop_codon'])),
+                                        reverse=True)
+            longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type=['CDS', 'stop_codon'])
+            return [x for x in sorted_transcripts if
+                    self.spliced_length(x, exon_type=['CDS', 'stop_codon']) == longest_CDS_length]
+
+    def longest_tx(self, gene_id, starting_subset=None):
+        if starting_subset == None:
+            transcripts = self.genes_to_tx[gene_id]
+        else:
+            transcripts = starting_subset
+        if len(transcripts) == 1:
+            return [sorted(transcripts)[0]]
+        else:
+            sorted_transcripts = sorted(transcripts, key=lambda x: int(self.spliced_length(x, exon_type='exon')),
+                                        reverse=True)
+            longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type='exon')
+            return [x for x in sorted_transcripts if self.spliced_length(x, exon_type='exon') == longest_CDS_length]
+
+    def pick_all_longest_CDS_transcripts(self):
+        # picks transcripts with longest CDS
+        # If tied picks longest TX
+        # Otherwise, pick the first one randomly and make note
+        genes_with_ties = []
+        chosen_tx = []
+        for gene_id in self.genes_to_tx:
+            tx_with_longest_CDS = self.tx_with_longest_CDS(gene_id)
+            assert len(tx_with_longest_CDS) > 0
+            if len(tx_with_longest_CDS) == 1:
+                chosen_tx.append(tx_with_longest_CDS[0])
+            else:
+                tx_with_longest_tx = self.longest_tx(gene_id, starting_subset=tx_with_longest_CDS)
+                assert len(tx_with_longest_tx) > 0
+                if len(tx_with_longest_tx) == 1:
+                    chosen_tx.append(tx_with_longest_tx[0])
+                else:
+                    genes_with_ties.append(gene_id)
+                    chosen_tx.append(tx_with_longest_tx[0])
+        #print 'genes with ties for longest CDS and tx:', len(genes_with_ties)
+        assert len(chosen_tx) == len(set(chosen_tx))
+        return chosen_tx
+
+    def filter_transcripts_by_value(self, key, allowed_values, starting_subset=None):
+        # returns all entries for which the given key matches one of the allowed values
+        chosen_tx = []
+        if starting_subset == None:
+            starting_subset = self.transcript_to_entries.keys()
+        for transcript_id in starting_subset:
+            if sorted(self.transcript_to_entries[transcript_id])[0].get_value(key) in allowed_values:
+                chosen_tx.append(transcript_id)
+        assert len(chosen_tx) == len(set(chosen_tx))
+        return chosen_tx
+
+    '''
+    def write_transcript_entries_to_file(self, out_file, transcript_ids=None):
+        if transcript_ids == None:
+            transcript_ids = self.transcript_to_entries.keys()
+        if out_file.endswith('.gz'):
+            out_gtf = gzip.open(out_file, 'w')
+        else:
+            out_gtf = open(out_file, 'w')
+        transcript_entries = []
+        for transcript_id in transcript_ids:
+            for transcript_entry in self.transcript_to_entries[transcript_id]:
+                transcript_entries.append(transcript_entry)
+        for transcript_entry in sorted(transcript_entries,
+                                       key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end')))):
+            out_gtf.write(transcript_entry.gtf_file_line)
+        out_gtf.close()
+    '''
+    def find_annotations_overlapping_range(self, chromosome, strand, start_position, end_position, type_restrictions=None,
+                                           type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene']):
+        """
+        :param chromosome: 
+        :param strand: 
+        :param start_position: 
+        :param end_position: 
+        :param type_restrictions: 
+        :return: list of entries (shortest first) that overlap the given range in any way. Partially or completely. 
+        """
+        overlaps = []
+        for position_bin in range(int(start_position) / 1000 * 1000, (int(end_position) / 1000 * 1000) + 1000, 1000):
+            for entry in self.chr_to_entry[chromosome][strand][position_bin]:
+                if type_restrictions != None and entry.get_value('type') not in type_restrictions:
+                    continue
+                #The general overlap criterion
+                elif start_position <= int(entry.get_value('end')) and end_position >= int(entry.get_value('start')):
+                    overlaps.append(entry)
+                elif int(entry.get_value('start')) > end_position:
+                    overlaps.sort(key=lambda x: (x.length(), type_sorting_order.index(x.get_value('type'))))
+                    return overlaps
+        overlaps.sort(key=lambda x: (x.length(), type_sorting_order.index(x.get_value('type'))))
+        return overlaps
+
+    def find_smallest_annotation_at_position(self, chromosome, strand, start_position, end_position, type_restrictions=None,
+                                            type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene']):
+        '''
+        Finds the smallest (smallest end-start) entry at a given position
+        :param chr: 
+        :param position: 
+        :return: 
+        '''
+        if not (start_position in self.shortest_annotations[strand][chr] and  end_position in self.shortest_annotations[strand][chr][start_position]):
+            entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order)
+            if len(entries)>0:
+                self.shortest_annotations[strand][chr][start_position][end_position] = entries[0]
+            else:
+                self.shortest_annotations[strand][chr][start_position][end_position] = None
+        return self.shortest_annotations[strand][chr][start_position][end_position]
+
+    def utr_type(self, entry):
+        """
+        if the type of the given entry is "UTR", returns '5p_UTR' or '3p_UTR' as appropriate
+        :param entry: 
+        :return: 
+        """
+        if not entry.is_type('UTR'):
+            return None
+        else:
+            transcript_id = entry.get_value('transcript_id')
+            cds_exons = self.sorted_exons(transcript_id, exon_type='CDS')
+            #print entry
+            #print cds_exons
+            if entry.get_value('strand') == '+' and int(entry.get_value('end')) < int(cds_exons[0].get_value('start')):
+                return '5p_UTR'
+            elif entry.get_value('strand') == '-' and int(entry.get_value('start')) > int(cds_exons[0].get_value('end')):
+                return '5p_UTR'
+            else:
+                return '3p_UTR'
+
+    ###############
+    # Methods for getting transcript information
+    ###############
     def spliced_length(self, transcript_id, exon_type='exon'):
         """
         exon_type can be CDS or exon.
@@ -529,148 +679,69 @@ class gtf_data():
         transcript_sequence = ''.join([exon_entry.sequence(genome_sequence) for exon_entry in ordered_exon_entries])
         return transcript_sequence
 
-    def tx_with_longest_CDS(self, gene_id, starting_subset=None):
+    def exon_boundaries(self, transcript_id):
         """
-        starting_subset can be a list of transcript ids. If it is given, then only thos etranscripts will be considered
+        
+        :param transcript_id: 
+        :param exon_type: 
+        :return: list of exon start and end positions, relative to the sense transcript orientation.
+         Transcription start site is zero
         """
-        if starting_subset == None:
-            transcripts = self.genes_to_tx[gene_id]
-        else:
-            transcripts = starting_subset
-        if len(transcripts) == 1:
-            return [sorted(transcripts)[0]]
-        else:
-            sorted_transcripts = sorted(transcripts,
-                                        key=lambda x: int(self.spliced_length(x, exon_type=['CDS', 'stop_codon'])),
-                                        reverse=True)
-            longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type=['CDS', 'stop_codon'])
-            return [x for x in sorted_transcripts if
-                    self.spliced_length(x, exon_type=['CDS', 'stop_codon']) == longest_CDS_length]
-
-    def longest_tx(self, gene_id, starting_subset=None):
-        if starting_subset == None:
-            transcripts = self.genes_to_tx[gene_id]
-        else:
-            transcripts = starting_subset
-        if len(transcripts) == 1:
-            return [sorted(transcripts)[0]]
-        else:
-            sorted_transcripts = sorted(transcripts, key=lambda x: int(self.spliced_length(x, exon_type='exon')),
-                                        reverse=True)
-            longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type='exon')
-            return [x for x in sorted_transcripts if self.spliced_length(x, exon_type='exon') == longest_CDS_length]
-
-    def pick_all_longest_CDS_transcripts(self):
-        # picks trnascripts with longest CDS
-        # If tied picks longest TX
-        # Otherwise, pick the first one randomly and make note
-        genes_with_ties = []
-        chosen_tx = []
-        for gene_id in self.genes_to_tx:
-            tx_with_longest_CDS = self.tx_with_longest_CDS(gene_id)
-            assert len(tx_with_longest_CDS) > 0
-            if len(tx_with_longest_CDS) == 1:
-                chosen_tx.append(tx_with_longest_CDS[0])
+        sorted_exons = self.sorted_exons(transcript_id, exon_type='exon')
+        starts = []
+        ends = []
+        for exon_index in range(len(sorted_exons)):
+            if exon_index == 0:
+                starts.append(0)
             else:
-                tx_with_longest_tx = self.longest_tx(gene_id, starting_subset=tx_with_longest_CDS)
-                assert len(tx_with_longest_tx) > 0
-                if len(tx_with_longest_tx) == 1:
-                    chosen_tx.append(tx_with_longest_tx[0])
-                else:
-                    genes_with_ties.append(gene_id)
-                    chosen_tx.append(tx_with_longest_tx[0])
-        print 'genes with ties for longest CDS and tx:', len(genes_with_ties)
-        assert len(chosen_tx) == len(set(chosen_tx))
-        return chosen_tx
+                starts.append(ends[exon_index-1]+1)
+            ends.append(starts[exon_index]+sorted_exons[exon_index].length()-1)
+        return starts, ends
 
-    def filter_transcripts_by_value(self, key, allowed_values, starting_subset=None):
-        # returns all entries for which the given key matches one of the allowed values
-        chosen_tx = []
-        if starting_subset == None:
-            starting_subset = self.transcript_to_entries.keys()
-        for transcript_id in starting_subset:
-            if sorted(self.transcript_to_entries[transcript_id])[0].get_value(key) in allowed_values:
-                chosen_tx.append(transcript_id)
-        assert len(chosen_tx) == len(set(chosen_tx))
-        return chosen_tx
+    def cds_boundaries(self, transcript_id):
+        """
 
-    def write_transcript_entries_to_file(self, out_file, transcript_ids=None):
-        if transcript_ids == None:
-            transcript_ids = self.transcript_to_entries.keys()
-        if out_file.endswith('.gz'):
-            out_gtf = gzip.open(out_file, 'w')
+        :param transcript_id: 
+        :param exon_type: 
+        :return: CDS start and end, relative to the sense transcript orientation.
+         Transcription start site is zero
+        """
+        sorted_exons = self.sorted_exons(transcript_id, exon_type='exon')
+        sorted_CDS_exons = self.sorted_exons(transcript_id, exon_type=['CDS', 'stop_codon'])
+        CDS_length = self.spliced_length(transcript_id, exon_type=['CDS', 'stop_codon'])
+        if len(sorted_CDS_exons) == 0:
+            return None, None
+        strand = sorted_CDS_exons[0].get_value('strand')
+        assert strand in ['+','-']
+        if strand == '+':
+            genomic_CDS_start = int(sorted_CDS_exons[0].get_value('start'))
+            genomic_CDS_end = int(sorted_CDS_exons[-1].get_value('end'))
+            # now, the hard part is finding the start codon
+            transcript_leader_length = 0
+            for exon in sorted_exons:
+                if exon.get_value('end') < genomic_CDS_start:
+                    transcript_leader_length += exon.length()
+                elif exon.get_value('start') <= genomic_CDS_start and exon.get_value('end') > genomic_CDS_start:
+                    transcript_leader_length += genomic_CDS_start-exon.get_value('start')
+                    break
+            start = transcript_leader_length
+            end = transcript_leader_length + CDS_length-1
         else:
-            out_gtf = open(out_file, 'w')
-        transcript_entries = []
-        for transcript_id in transcript_ids:
-            for transcript_entry in self.transcript_to_entries[transcript_id]:
-                transcript_entries.append(transcript_entry)
-        for transcript_entry in sorted(transcript_entries,
-                                       key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end')))):
-            out_gtf.write(transcript_entry.gtf_file_line)
-        out_gtf.close()
-
-    def find_annotations_overlapping_range(self, chromosome, strand, start_position, end_position, type_restrictions=None,
-                                           type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene']):
-        """
-        :param chromosome: 
-        :param strand: 
-        :param start_position: 
-        :param end_position: 
-        :param type_restrictions: 
-        :return: list of entries (shortest first) that overlap the given range in any way. Partially or completely. 
-        """
-        overlaps = []
-        for position_bin in range(int(start_position) / 1000 * 1000, (int(end_position) / 1000 * 1000) + 1000, 1000):
-            for entry in self.chr_to_entry[chromosome][strand][position_bin]:
-                if type_restrictions != None and entry.get_value('type') not in type_restrictions:
-                    continue
-                #The general overlap criterion
-                elif start_position <= int(entry.get_value('end')) and end_position >= int(entry.get_value('start')):
-                    overlaps.append(entry)
-                elif int(entry.get_value('start')) > end_position:
-                    return sorted(overlaps, key=lambda x: (x.length(), type_sorting_order.index(x.get_value('type'))))
-        return sorted(overlaps, key=lambda x: (type_sorting_order.index(x.get_value('type')), x.length()))
-
-    def find_smallest_annotation_at_position(self, chromosome, strand, start_position, end_position, type_restrictions=None,
-                                            type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene']):
-        '''
-        Finds the smallest (smallest end-start) entry at a given position
-        :param chr: 
-        :param position: 
-        :return: 
-        '''
-        if not (start_position in self.shortest_annotations[strand][chr] and  end_position in self.shortest_annotations[strand][chr][start_position]):
-            entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order)
-            if len(entries)>0:
-                self.shortest_annotations[strand][chr][start_position][end_position] = entries[0]
-            else:
-                self.shortest_annotations[strand][chr][start_position][end_position] = None
-        return self.shortest_annotations[strand][chr][start_position][end_position]
-
-    def utr_type(self, entry):
-        """
-        if the type of the given entry is "UTR", returns '5p_UTR' or '3p_UTR' as appropriate
-        :param entry: 
-        :return: 
-        """
-        if not entry.is_type('UTR'):
-            return None
-        else:
-            transcript_id = entry.get_value('transcript_id')
-            cds_exons = self.sorted_exons(transcript_id, exon_type='CDS')
-            #print entry
-            #print cds_exons
-            if entry.get_value('strand') == '+' and int(entry.get_value('end')) < int(cds_exons[0].get_value('start')):
-                return '5p_UTR'
-            elif entry.get_value('strand') == '-' and int(entry.get_value('start')) > int(cds_exons[0].get_value('end')):
-                return '5p_UTR'
-            else:
-                return '3p_UTR'
+            genomic_CDS_start = int(sorted_CDS_exons[0].get_value('end'))
+            transcript_leader_length = 0
+            for exon in sorted_exons:
+                if exon.get_value('start') > genomic_CDS_start:
+                    transcript_leader_length += exon.length()
+                elif exon.get_value('end') >= genomic_CDS_start and exon.get_value('start') < genomic_CDS_start:
+                    transcript_leader_length += exon.get_value('end')-genomic_CDS_start
+                    break
+            start = transcript_leader_length
+            end = transcript_leader_length + CDS_length-1
+        return start, end
 
 class gtf_entry():
     def __init__(self, gtf_file_line, parent_gtf):
-        self.gtf_file_line = gtf_file_line
+        #self.gtf_file_line = gtf_file_line
         ll = gtf_file_line.rstrip('\n').split('\t')
         self.primary_data = dict(zip(parent_gtf.fields, ll))
         additional_pairs = self.primary_data['additional'].split('; ')
@@ -678,8 +749,8 @@ class gtf_entry():
         for key in self.secondary_data:
             self.secondary_data[key] = self.secondary_data[key].strip('"')
 
-    def __repr__(self):
-        return self.gtf_file_line
+    #def __repr__(self):
+    #    return self.gtf_file_line
 
     def is_type(self, entry_type):
         """
