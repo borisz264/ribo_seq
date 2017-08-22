@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 plt.rcParams['pdf.fonttype'] = 42 #leaves most text as actual text in PDFs, not outlines
 import os
-import scipy.stats as stats
 import uniform_colormaps
 import math
 from matplotlib.ticker import AutoMinorLocator
