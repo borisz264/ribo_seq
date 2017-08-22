@@ -20,11 +20,14 @@ This will run the basic read trimming and mapping
 
 #### Optional Parameters
 * **--threads**   Specify number of threads to use. Default is 8.
-* **--make-tables**   If specified, will output all tables (read coutns, RPKMs, etc)
+* **--perform-qc**  Will perform QC analysis (identification of contaminants, most common rRNA/tRNA sequences)
+* **--make-tables**   If specified, will output all tables (read counts, RPKMs, etc)
 * **--make-plots**    If specified, will output all plots
 * **--all-tasks**     Same as specifiying both --make-plots and --make-tables
 
 ## Prerequisites
+*   I highly recommend 32 GB of RAM for a human or mouse genome. Mapping can be done with less (with a speed tradeoff), but currently the QC and read counting scripts routinely use over 16-120GB. This requirement scales with genome size, not dataset size.
+
 #### Dependencies
 *   skewer read adaptor trimmer downloaded and added to path (https://github.com/relipmoc/skewer) (0.2.2 tested)
 *   STAR RNA-seq aligner downlaoded and added to path (tested versionSTAR 020201)
@@ -38,3 +41,5 @@ This will run the basic read trimming and mapping
 *   matplotlib (2.0.2)
 *   seaborn (0.8)
 *   pysam (0.11.2.2)
+*   dill (0.2.7.1)
+*   pybedtools (0.7.10)
