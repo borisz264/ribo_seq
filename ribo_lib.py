@@ -7,16 +7,20 @@ import numpy as np
 import sys
 import math
 
-def assign_tx_reads(experiment_settings, lib_settings):
+def assign_tx_reads(experiment, experiment_settings, lib_settings):
+    #TODO: explicit handling of 5'end untemplated U?
+    #TODO: figure out how to handle molecular barcoding
     lib_settings.write_to_log('counting reads or loading counts')
     if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
-        print "counting BAM reads"
+        lib_settings.write_to_log("counting BAM reads")
         transcripts = {}
-        tx_annotations = ribo_utils.tsv_to_dict(experiment_settings.get_property('canonical_tx_features'))
-        tx_seqs = ribo_utils.convertFastaToDict(experiment_settings.get_property('canonical_tx_seqs'))
+        genome = experiment.genome
+        GTF_annotations = experiment.GTF_annotations
         samfile = pysam.AlignmentFile(lib_settings.get_transcript_mapped_reads(), "rb")
-        for tx_id in [t for t in samfile.references if t in tx_annotations and t in tx_seqs]:
-            transcripts[tx_id] = transcript(tx_id, tx_annotations[tx_id], tx_seqs[tx_id], samfile)
+        for tx_id in  GTF_annotations.pick_all_longest_CDS_transcripts():
+            chr = GTF_annotations.tx_to_chr[tx_id]
+            if chr in genome.genome_sequence:
+                transcripts[tx_id] = transcript(tx_id, genome, GTF_annotations, samfile, reads_reversed=experiment_settings.get_property('reads_reversed'))
         samfile.close()
         ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
     lib_settings.write_to_log('done counting reads or loading counts')
@@ -31,7 +35,6 @@ class ribo_lib:
         self.lib_settings = lib_settings
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
-        self.get_wdir = experiment_settings.get_wdir
 
         print "unpickling %s counts" % lib_settings.sample_name
         self.transcripts = ribo_utils.unPickle(self.lib_settings.get_transcript_counts())
@@ -54,9 +57,9 @@ class ribo_lib:
     def sorted_names(self):
         return sorted(self.transcripts.keys())
 
-    def get_transcript(self, sequence_name):
-        if sequence_name in self.transcripts:
-            return self.transcripts[sequence_name]
+    def get_transcript(self, tx_id):
+        if tx_id in self.transcripts:
+            return self.transcripts[tx_id]
         else:
             return None
 
@@ -95,7 +98,6 @@ class ribo_lib:
                                                               for tx in self.transcripts.values()])
         return  self.total_mapped_counts[parameter_string]
 
-
     def get_total_cds_reads(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
         parameter_string = 'cds_%d_%d_%s_%s' % (start_offset, stop_offset, read_end, str(read_lengths))
         if parameter_string not in self.total_mapped_counts:
@@ -112,11 +114,9 @@ class ribo_lib:
 
         return (10 ** 6) * float(tx_counts) / float(total_counts)
 
-
     def get_rpkm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
         return self.get_rpm(sequence_name, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) /\
                self.transcripts[sequence_name].tx_length
-
 
     def get_cds_rpm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
         cds_counts = self.transcripts[sequence_name].get_cds_read_count(start_offset, stop_offset, read_end=read_end,
@@ -124,7 +124,6 @@ class ribo_lib:
 
         total_counts = self.get_total_cds_reads(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
         return (10 ** 6) * float(cds_counts) / float(total_counts)
-
 
     def get_cds_rpkm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
         return self.get_cds_rpm(sequence_name, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) / \
@@ -142,29 +141,31 @@ class transcript:
         Enrichment relative to input library
 
     """
-    def __init__(self, tx_id, tx_info, tx_seq, sam_file):
-        self.strand = tx_info['strand']
-        self.tx_length = int(tx_info['tx_length'])
-        self.exon_starts = [int(start) for start in tx_info['exon_starts'].split(',')]
-        self.exon_ends = [int(end) for end in tx_info['tx_exon_ends'].split(',')]
-        self.cds_start = int(tx_info['cdsStart'])
-        self.cds_end = int(tx_info['cdsEnd'])
-        self.cds_length = self.cds_end-self.cds_start
-        self.trailer_length = self.tx_length-self.cds_end
-        self.leader_length =self.cds_start
-        assert self.trailer_length + self.cds_length + self.leader_length == self.tx_length
-        self.gene_id = tx_info['geneID']
-        self.notes = [note for note in tx_info['notes'].split(',')]
-
-        self.sequence_name = tx_id
-        self.full_sequence = tx_seq
+    def __init__(self, tx_id, genome, GTF_annotations, sam_file, reads_reversed = False):
+        self.GTF_annotations = GTF_annotations
+        self.tx_length = GTF_annotations.spliced_length(tx_id, exon_type='exon')
+        self.exon_starts, self.exon_ends = GTF_annotations.exon_boundaries(tx_id)
+        self.cds_start, self.cds_end = GTF_annotations.cds_boundaries(tx_id)
+        self.chr = GTF_annotations.tx_to_chr[tx_id]
+        self.strand = GTF_annotations.tx_to_strand[tx_id]
+        self.tx_id = tx_id
+        self.gene_id = GTF_annotations.tx_to_genes[tx_id]
+        if self.cds_end is None or self.cds_start is None:
+            self.tx_type = 'noncoding'
+        else:
+            self.tx_type = 'coding'
+            self.cds_length = self.cds_end-self.cds_start
+            self.trailer_length = self.tx_length-self.cds_end
+            self.leader_length =self.cds_start
+            assert self.trailer_length + self.cds_length + self.leader_length == self.tx_length
+        self.full_sequence = GTF_annotations.transcript_sequence(genome, tx_id, exon_type='exon')
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_5p_lengths_at_position = defaultdict(dict)  # will map position to a list of fragment lengths with 5' ends at that position
         self.fragment_3p_lengths_at_position = defaultdict(dict) # will map position to a list of fragment lengths with 3' ends at that position
         self.fragment_count = 0
         self.length_dist = defaultdict(int)
-        self.assign_read_ends_from_sam(sam_file)
+        self.assign_read_ends_from_sam(sam_file, reads_reversed = reads_reversed)
 
     def get_first_jxn_in_CDS(self):
         for exon_start in self.exon_starts:
@@ -172,9 +173,8 @@ class transcript:
                 return exon_start
         return None
 
-    def assign_read_ends_from_sam(self, sam_file):
-        all_mapping_reads = sam_file.fetch(reference = self.sequence_name)
-        reads_reversed = self.experiment_settings.get_property('reads_reversed')
+    def assign_read_ends_from_sam(self, sam_file, reads_reversed = False):
+        all_mapping_reads = sam_file.fetch(reference = self.tx_id)
         for read in [r for r in all_mapping_reads if (not r.is_secondary) and (reads_reversed == r.is_reverse)]:
             if reads_reversed:
                 fragment_start = read.reference_end
