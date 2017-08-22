@@ -1,7 +1,6 @@
 import os
 import ConfigParser
 import simplejson
-import itertools
 import shutil
 import datetime
 import sys
@@ -276,6 +275,15 @@ class ribo_lib_settings:
            {'sample_name': self.sample_name})
         return sequence_counts
 
+    def get_qc_pickle(self):
+        qc_pickle = os.path.join(
+          self.experiment_settings.get_rdir(),
+          'QC',
+          '%(sample_name)s.qc.pkl' %
+           {'sample_name': self.sample_name})
+        return qc_pickle
+
+
     #####################
     # Checks for existence
     #####################
@@ -295,6 +303,10 @@ class ribo_lib_settings:
     def genome_mapped_reads_exist(self):
         mapped_reads = self.get_genome_mapped_reads()
         return ribo_utils.file_exists(mapped_reads)
+
+    def qc_pickle_exists(self):
+        qc_pickle = self.get_qc_pickle()
+        return ribo_utils.file_exists(qc_pickle)
 
     def sequence_counts_exist(self):
         sequence_counts = self.get_transcript_counts()
