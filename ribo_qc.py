@@ -1,8 +1,5 @@
 from collections import defaultdict
 import matplotlib.pyplot as plt
-
-import uniform_colormaps
-
 plt.rcParams['pdf.fonttype'] = 42
 import os
 import ribo_utils
@@ -25,8 +22,8 @@ class ribo_qc:
         self.get_property = self.experiment_settings.get_property
         self.get_rdir = experiment_settings.get_rdir
         ribo_utils.make_dir(self.experiment.rdir_path('QC'))
-        self.genome = ribo_utils.genome_sequence(self.experiment_settings.get_genome_sequence_files())
-        self.GTF_annotations = ribo_utils.gtf_data(self.experiment_settings.get_annotation_GTF_file())
+        self.genome = self.experiment.genome
+        self.GTF_annotations = self.experiment.GTF_annotations
         self.lib_QCs = [self.initialize_qc_lib(lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
         #TODO: libraries need not be initiated if the proper intermediate TSV files exist
         self.plot_rRNA_size_distributions()
@@ -215,19 +212,22 @@ class ribo_qc:
         plt.savefig(outName, transparent=True)
 
     def initialize_qc_lib(self, lib_settings):
-        #if lib_settings.qc_pickle_exists():
-        #    lib_settings.write_to_log('existing QC counts found, unpickling %s' % lib_settings.get_qc_pickle())
-        #    return ribo_utils.unPickle(lib_settings.get_qc_pickle())
-        #else:
-        #    lib_settings.write_to_log('no existing QC counts found, counting')
-        #    lib = single_lib_qc(self, lib_settings)
-        #    ribo_utils.makePickle(lib, lib_settings.get_qc_pickle())
+        '''
+        if lib_settings.qc_pickle_exists():
+            lib_settings.write_to_log('existing QC counts found, unpickling %s' % lib_settings.get_qc_pickle())
+            return ribo_utils.unPickle(lib_settings.get_qc_pickle())
+        else:
+            lib_settings.write_to_log('no existing QC counts found, counting')
+            lib = single_lib_qc(self, lib_settings)
+            lib_settings.write_to_log('writing %s' % (lib_settings.get_qc_pickle()))
+            ribo_utils.makePickle(lib, lib_settings.get_qc_pickle())
+        '''
         return single_lib_qc(self, lib_settings)
 
 class single_lib_qc():
     def __init__(self, parent_qc, lib_settings):
         """
-        Constructor for Library class
+        Constructor for Library class 
         """
         self.parent_qc = parent_qc
         self.lib_settings = lib_settings
@@ -235,10 +235,10 @@ class single_lib_qc():
         self.ncrna_samfile = pysam.AlignmentFile(self.lib_settings.get_ncrna_mapped_reads(), "rb")
         self.count_ncrna_mapping_reads()
         self.ncrna_samfile.close()
-        self.genome_samfile = pysam.AlignmentFile(self.lib_settings.get_genome_mapped_reads(), "rb")
+        genome_samfile = pysam.AlignmentFile(self.lib_settings.get_genome_mapped_reads(), "rb")
         #self.get_mapping_multiplicity_stats()
-        self.get_mapping_annotation_summary()
-        self.genome_samfile.close()
+        self.get_mapping_annotation_summary(genome_samfile)
+        genome_samfile.close()
 
     def count_ncrna_mapping_reads(self):
         self.ncrna_reference_counts = defaultdict(int)
@@ -305,7 +305,6 @@ class single_lib_qc():
         self.lib_settings.write_to_log('done parsing adpator trimming stats')
 
     def get_mapping_multiplicity_stats(self):
-        #TODO: remove print statements and have this written to a summary file
         total_alignments = 0
         primary_alignments = 0
         secondary_alignments = 0
@@ -333,7 +332,7 @@ class single_lib_qc():
         #for mult in sorted(multiplicity.keys()):
         #    print '%d: %d' % (mult, multiplicity[mult])
 
-    def get_mapping_annotation_summary(self, reversed_reads=False):
+    def get_mapping_annotation_summary(self, genome_samfile, reversed_reads=False):
         '''
         produce a summary of where all of the reads in a dataset map.
         :return: 
@@ -341,9 +340,8 @@ class single_lib_qc():
         self.lib_settings.write_to_log('making mapping annotation_summary for all mapping reads')
         self.annotation_mapping_counts = defaultdict(lambda : defaultdict(int))
         self.total_primary_alignments = 0
-        for chromosome in self.genome_samfile.references:
-            self.lib_settings.write_to_log(chromosome)
-            for alignment in self.genome_samfile.fetch(reference=chromosome):
+        for chromosome in genome_samfile.references:
+            for alignment in genome_samfile.fetch(reference=chromosome):
                 if not alignment.is_secondary:
                     self.total_primary_alignments += 1
                     multiplicity = int(alignment.get_tag('NH:i'))
@@ -368,6 +366,5 @@ class single_lib_qc():
                         self.annotation_mapping_counts[uniqueness][type] += 1
                     else:
                         self.annotation_mapping_counts[uniqueness][annotation_entry.get_value('type')]+=1
-        self.lib_settings.write_to_log('%s' % str(self.annotation_mapping_counts))
         self.lib_settings.write_to_log('total_aligned: %d' % self.total_primary_alignments)
-        #self.lib_settings.write_to_log('total_annotated: %d' % sum(self.annotation_mapping_counts.values()))
+        self.lib_settings.write_to_log('finished making mapping annotation_summary for all mapping reads')
