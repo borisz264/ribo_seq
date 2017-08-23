@@ -6,7 +6,6 @@ import ribo_utils
 import numpy as np
 import sys
 import math
-
 def assign_tx_reads(experiment, experiment_settings, lib_settings):
     #TODO: explicit handling of 5'end untemplated U?
     #TODO: figure out how to handle molecular barcoding
@@ -20,7 +19,7 @@ def assign_tx_reads(experiment, experiment_settings, lib_settings):
         for tx_id in  GTF_annotations.pick_all_longest_CDS_transcripts():
             chr = GTF_annotations.tx_to_chr[tx_id]
             if chr in genome.genome_sequence:
-                transcripts[tx_id] = transcript(tx_id, genome, GTF_annotations, samfile, reads_reversed=experiment_settings.get_property('reads_reversed'))
+                transcripts[tx_id] = transcript(tx_id, GTF_annotations, genome, samfile, reads_reversed=experiment_settings.get_property('reads_reversed'))
         samfile.close()
         ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
     lib_settings.write_to_log('done counting reads or loading counts')
@@ -80,15 +79,16 @@ class ribo_lib:
         else:
             return passing_mappings
 
-    def get_all_fragment_length_counts(self):
+    def get_all_CDS_fragment_length_counts(self):
         all_length_counts = defaultdict(int)
-        for pool_sequence_mapping in self.transcripts.values():
-            for fragment_length in pool_sequence_mapping.length_dist:
-                all_length_counts[fragment_length] += pool_sequence_mapping.length_dist[fragment_length]
+        for tx in self.transcripts.values():
+            if tx.is_coding:
+                for fragment_length in tx.length_dist:
+                    all_length_counts[fragment_length] += tx.length_dist[fragment_length]
         return all_length_counts
 
     def get_fragment_count_distribution(self):
-        return [self.transcripts[sequence].fragment_count for sequence in self.transcripts]
+        return [self.transcripts[sequence].fragment_count for sequence in self.transcripts if self.transcripts[sequence].is_coding]
 
     def get_total_tx_reads(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
         parameter_string = 'tx_%d_%d_%s_%s' %(start_offset, stop_offset, read_end, str(read_lengths))
@@ -104,7 +104,7 @@ class ribo_lib:
             self.total_mapped_counts[parameter_string] = sum(
                 [tx.get_cds_read_count(start_offset, stop_offset, read_end=read_end,
                                       read_lengths=read_lengths)
-                 for tx in self.transcripts.values()])
+                 for tx in self.transcripts.values() if tx.is_coding])
         return self.total_mapped_counts[parameter_string]
 
     def get_rpm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
@@ -141,8 +141,8 @@ class transcript:
         Enrichment relative to input library
 
     """
-    def __init__(self, tx_id, genome, GTF_annotations, sam_file, reads_reversed = False):
-        self.GTF_annotations = GTF_annotations
+    def __init__(self, tx_id, GTF_annotations, genome, sam_file, reads_reversed = False):
+        #self.GTF_annotations = GTF_annotations
         self.tx_length = GTF_annotations.spliced_length(tx_id, exon_type='exon')
         self.exon_starts, self.exon_ends = GTF_annotations.exon_boundaries(tx_id)
         self.cds_start, self.cds_end = GTF_annotations.cds_boundaries(tx_id)
@@ -151,28 +151,58 @@ class transcript:
         self.tx_id = tx_id
         self.gene_id = GTF_annotations.tx_to_genes[tx_id]
         if self.cds_end is None or self.cds_start is None:
-            self.tx_type = 'noncoding'
+            self.is_coding = False
         else:
-            self.tx_type = 'coding'
+            self.is_coding = True
             self.cds_length = self.cds_end-self.cds_start
             self.trailer_length = self.tx_length-self.cds_end
             self.leader_length =self.cds_start
             assert self.trailer_length + self.cds_length + self.leader_length == self.tx_length
-        self.full_sequence = GTF_annotations.transcript_sequence(genome, tx_id, exon_type='exon')
+        self.full_sequence = GTF_annotations.transcript_sequence(genome, self.tx_id, exon_type='exon')
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_5p_lengths_at_position = defaultdict(dict)  # will map position to a list of fragment lengths with 5' ends at that position
         self.fragment_3p_lengths_at_position = defaultdict(dict) # will map position to a list of fragment lengths with 3' ends at that position
         self.fragment_count = 0
         self.length_dist = defaultdict(int)
-        self.assign_read_ends_from_sam(sam_file, reads_reversed = reads_reversed)
+        #self.assign_read_ends_from_sam(sam_file, reads_reversed = reads_reversed)
+
+        all_mapping_reads = sam_file.fetch(reference = self.tx_id)
+        for read in [r for r in all_mapping_reads if (not r.is_secondary) and (reads_reversed == r.is_reverse)]:
+            multiplicity = int(read.get_tag('NH:i'))
+            assert multiplicity > 0
+            if multiplicity == 1:
+                if reads_reversed:
+                    fragment_start = read.reference_end
+                    fragment_end = read.reference_start
+                else:
+                    fragment_start = read.reference_start #0-based start of fragment
+                    fragment_end = read.reference_end
+                # get read length from sequence, or CIGAR string if unavailable
+                fragment_length = read.infer_query_length(always=False)
+                assert fragment_length != 0
+                self.fragment_5p_ends_at_position[fragment_start] += 1
+                self.fragment_3p_ends_at_position[fragment_end] += 1
+                self.fragment_count += 1
+                self.length_dist[fragment_length] += 1
+                if fragment_length not in self.fragment_5p_lengths_at_position[fragment_start]:
+                    self.fragment_5p_lengths_at_position[fragment_start][fragment_length] = 0
+                self.fragment_5p_lengths_at_position[fragment_start][fragment_length] += 1
+                if fragment_length not in self.fragment_3p_lengths_at_position[fragment_end]:
+                    self.fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
+                self.fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
+
+    def get_sequence(self, genome, GTF_anno):
+        if self.full_sequence is None:
+            self.full_sequence = GTF_anno.transcript_sequence(self, genome, self.tx_id, exon_type='exon')
+
 
     def get_first_jxn_in_CDS(self):
         for exon_start in self.exon_starts:
             if exon_start> self.cds_start:
                 return exon_start
         return None
-
+    '''
     def assign_read_ends_from_sam(self, sam_file, reads_reversed = False):
         all_mapping_reads = sam_file.fetch(reference = self.tx_id)
         for read in [r for r in all_mapping_reads if (not r.is_secondary) and (reads_reversed == r.is_reverse)]:
@@ -195,7 +225,7 @@ class transcript:
             if fragment_length not in self.fragment_3p_lengths_at_position[fragment_end]:
                 self.fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
             self.fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
-
+    '''
     def contains_subsequence(self, subsequence):
         if subsequence in self.full_sequence:
             return True
@@ -253,7 +283,7 @@ class transcript:
                                           super_dict[position] if read_length in super_dict[position]])
         return lengths_dict
 
-    def get_read_counts_array(self, anchor, left_offset, right_offset, read_end ='5p', read_lengths ='all'):
+    def get_CDS_read_counts_array(self, anchor, left_offset, right_offset, read_end ='5p', read_lengths ='all'):
         '''
 
         :param anchor: the "reference" or "zero" position for the array. For example the CDS start or stop
@@ -343,9 +373,10 @@ class transcript:
     def second_stop_position(self):
         #find the position of the first nt of the first in-frame stop after the canonical stop codon,
         # relative to the start of the tx
-
+        print self.full_sequence
+        print self.cds_end
         stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
-
+        print stop_codon
         if ribo_utils.GENETIC_CODE[stop_codon] == '_':
             for position in range(self.cds_end, self.tx_length, 3):
                 codon = self.full_sequence[position: position+3]
@@ -391,26 +422,27 @@ class transcript:
         :param post_cds_stop_buffer: omit this many nucleotides at edge from counting
         :return:
         """
-        cds_counts = self.get_cds_read_count(post_cds_start_buffer-p_offset, (-1*pre_cds_stop_buffer)-p_offset, read_end=read_end,
-                                                   read_lengths=read_lengths)
-        cds_read_density =  cds_counts/float(self.cds_length)
-        second_stop = self.second_stop_position()
-        if not second_stop == None and cds_counts>=cds_cutoff:
-            ex_length = self.readthrough_extension_length(pre_extension_stop_buffer=pre_extension_stop_buffer,
-                                              post_cds_stop_buffer=post_cds_stop_buffer)
-            if ex_length > 0:
-                second_cds_density = self.get_readthrough_counts(p_offset=p_offset, read_end=read_end, read_lengths=read_lengths,
-                                                                 pre_extension_stop_buffer=pre_extension_stop_buffer,
-                                                                 post_cds_stop_buffer=post_cds_stop_buffer)/ex_length
+        if self.is_coding:
+            cds_counts = self.get_cds_read_count(post_cds_start_buffer-p_offset, (-1*pre_cds_stop_buffer)-p_offset, read_end=read_end,
+                                                       read_lengths=read_lengths)
+            cds_read_density =  cds_counts/float(self.cds_length)
+            second_stop = self.second_stop_position()
+            if not second_stop == None and cds_counts>=cds_cutoff:
+                ex_length = self.readthrough_extension_length(pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                  post_cds_stop_buffer=post_cds_stop_buffer)
+                if ex_length > 0:
+                    second_cds_density = self.get_readthrough_counts(p_offset=p_offset, read_end=read_end, read_lengths=read_lengths,
+                                                                     pre_extension_stop_buffer=pre_extension_stop_buffer,
+                                                                     post_cds_stop_buffer=post_cds_stop_buffer)/ex_length
 
-                readthrough = second_cds_density/cds_read_density
-                if log:
-                    if readthrough>0:
-                        return math.log(readthrough, 10)
+                    readthrough = second_cds_density/cds_read_density
+                    if log:
+                        if readthrough>0:
+                            return math.log(readthrough, 10)
+                        else:
+                            return None
                     else:
-                        return None
-                else:
-                    return readthrough
+                        return readthrough
         return None
 
     def stop_codon_context(self):
