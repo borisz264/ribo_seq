@@ -192,40 +192,12 @@ class transcript:
                     self.fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
                 self.fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
 
-    def get_sequence(self, genome, GTF_anno):
-        if self.full_sequence is None:
-            self.full_sequence = GTF_anno.transcript_sequence(self, genome, self.tx_id, exon_type='exon')
-
-
     def get_first_jxn_in_CDS(self):
         for exon_start in self.exon_starts:
             if exon_start> self.cds_start:
                 return exon_start
         return None
-    '''
-    def assign_read_ends_from_sam(self, sam_file, reads_reversed = False):
-        all_mapping_reads = sam_file.fetch(reference = self.tx_id)
-        for read in [r for r in all_mapping_reads if (not r.is_secondary) and (reads_reversed == r.is_reverse)]:
-            if reads_reversed:
-                fragment_start = read.reference_end
-                fragment_end = read.reference_start
-            else:
-                fragment_start = read.reference_start #0-based start of fragment
-                fragment_end = read.reference_end
-            # get read length from sequence, or CIGAR string if unavailable
-            fragment_length = read.infer_query_length(always=False)
-            assert fragment_length != 0
-            self.fragment_5p_ends_at_position[fragment_start] += 1
-            self.fragment_3p_ends_at_position[fragment_end] += 1
-            self.fragment_count += 1
-            self.length_dist[fragment_length] += 1
-            if fragment_length not in self.fragment_5p_lengths_at_position[fragment_start]:
-                self.fragment_5p_lengths_at_position[fragment_start][fragment_length] = 0
-            self.fragment_5p_lengths_at_position[fragment_start][fragment_length] += 1
-            if fragment_length not in self.fragment_3p_lengths_at_position[fragment_end]:
-                self.fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
-            self.fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
-    '''
+
     def contains_subsequence(self, subsequence):
         if subsequence in self.full_sequence:
             return True
