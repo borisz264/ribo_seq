@@ -443,8 +443,8 @@ class gtf_data():
         self.tx_to_genes = {}
         self.tx_to_strand = {}
         self.tx_to_chr = {}
-        self.feature_type_summary = defaultdict(int)
-        self.transcript_type_summary = defaultdict(int)
+        #self.feature_type_summary = defaultdict(int)
+        #self.transcript_type_summary = defaultdict(int)
         # for each location a read maps, will keep the entry for the shortest feature found there and it's type
         self.shortest_annotations = {'+':defaultdict(lambda : defaultdict(dict)),
                                      '-':defaultdict(lambda : defaultdict(dict))}
@@ -452,7 +452,7 @@ class gtf_data():
         # Each unit of 1000 (a mille) can also potentially entries with the neighboring ones
         # So shorter entries will precede longer ones.
         #I'm using integer division to do the rounding
-        self.chr_to_entry = defaultdict(lambda: defaultdict(lambda : defaultdict(list)))
+        self.chr_to_entry = None
         self.add_gtf_data(gtf_file)
     def add_gtf_data(self, gtf_file):
         if gtf_file.endswith('.gz'):
@@ -463,8 +463,8 @@ class gtf_data():
             if not line.startswith('#'):
                 new_entry = gtf_entry(line, self)
                 self.gtf_entries.append(new_entry)
-                self.feature_type_summary[new_entry.get_value('type')] += 1
-                self.transcript_type_summary[new_entry.get_value('transcript_type')] += 1
+                #self.feature_type_summary[new_entry.get_value('type')] += 1
+                #self.transcript_type_summary[new_entry.get_value('transcript_type')] += 1
                 gene_id = new_entry.get_value('gene_id')
                 transcript_id = new_entry.get_value('transcript_id')
                 self.tx_to_genes[transcript_id] = gene_id
@@ -472,20 +472,28 @@ class gtf_data():
                 self.tx_to_strand[transcript_id] = strand
                 chromosome = new_entry.get_value('chr')
                 self.tx_to_chr[transcript_id] = chromosome
-                for position_bin in range(int(new_entry.get_value('start'))/1000*1000, (int(new_entry.get_value('end'))/1000*1000)+1000, 1000):
-                    self.chr_to_entry[chromosome][strand][position_bin].append(new_entry)
-                    assert len(self.chr_to_entry[chromosome][strand][position_bin]) == len(set(self.chr_to_entry[chromosome][strand][position_bin]))
                 if gene_id != None:
                     self.gene_to_entries[gene_id].add(new_entry)
                     if transcript_id != None:
                         self.transcript_to_entries[transcript_id].add(new_entry)
                         self.genes_to_tx[gene_id].add(transcript_id)
-        self.gtf_entries.sort(key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end'))))
+        #self.gtf_entries.sort(key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end'))))
+        gtf.close()
+
+
+    def bin_entries_on_chromosome(self):
+        print 'binning'
+        self.chr_to_entry = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        for entry in self.gtf_entries:
+            for position_bin in range(int(entry.get_value('start')) / 1000 * 1000,
+                                      (int(entry.get_value('end')) / 1000 * 1000) + 1000, 1000):
+                self.chr_to_entry[entry.get_value('chr')][entry.get_value('strand')][position_bin].append(entry)
+                assert len(self.chr_to_entry[entry.get_value('chr')][entry.get_value('strand')][position_bin]) == len(
+                    set(self.chr_to_entry[entry.get_value('chr')][entry.get_value('strand')][position_bin]))
         for chromosome in self.chr_to_entry:
             for strand in self.chr_to_entry[chromosome]:
                 for position_bin in self.chr_to_entry[chromosome][strand]:
                     self.chr_to_entry[chromosome][strand][position_bin].sort(key=lambda x: (int(x.get_value('start')), int(x.get_value('end'))))
-        gtf.close()
 
     def print_transcript_multiplicity(self, gene_type=None):
         self.tx_counts_histogram = defaultdict(int)
@@ -587,6 +595,8 @@ class gtf_data():
         :param type_restrictions: 
         :return: list of entries (shortest first) that overlap the given range in any way. Partially or completely. 
         """
+        if self.chr_to_entry is None:
+            self.bin_entries_on_chromosome()
         overlaps = []
         for position_bin in range(int(start_position) / 1000 * 1000, (int(end_position) / 1000 * 1000) + 1000, 1000):
             for entry in self.chr_to_entry[chromosome][strand][position_bin]:
@@ -609,13 +619,15 @@ class gtf_data():
         :param position: 
         :return: 
         '''
-        if not (start_position in self.shortest_annotations[strand][chr] and  end_position in self.shortest_annotations[strand][chr][start_position]):
-            entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order)
-            if len(entries)>0:
-                self.shortest_annotations[strand][chr][start_position][end_position] = entries[0]
-            else:
-                self.shortest_annotations[strand][chr][start_position][end_position] = None
-        return self.shortest_annotations[strand][chr][start_position][end_position]
+        #if not (start_position in self.shortest_annotations[strand][chr] and  end_position in self.shortest_annotations[strand][chr][start_position]):
+        entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order)
+        if len(entries)>0:
+            #self.shortest_annotations[strand][chr][start_position][end_position] = entries[0]
+            return entries[0]
+        else:
+            #self.shortest_annotations[strand][chr][start_position][end_position] = None
+            return None
+        #return self.shortest_annotations[strand][chr][start_position][end_position]
 
     def utr_type(self, entry):
         """
@@ -662,11 +674,13 @@ class gtf_data():
         However, the "end" of the exon boundary is always larger than the 'start'
         """
         transcript_entries = self.transcript_to_entries[transcript_id]
-        ordered_exon_entries = sorted([entry for entry in transcript_entries if entry.is_type(exon_type)],
-                                      key=lambda x: int(x.get_value('start')))
+        ordered_exon_entries = [entry for entry in transcript_entries if entry.is_type(exon_type)]
+        ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')))
         # if this transcript is on the minus strand, the exon order needs to be flipped
-        if len(ordered_exon_entries) > 0 and ordered_exon_entries[0].get_value('strand') == '-':
-            ordered_exon_entries = ordered_exon_entries[::-1]
+        if ordered_exon_entries[0].get_value('strand') == '+':
+            ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')))
+        else:
+            ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')), reverse=True)
         return ordered_exon_entries
 
     def transcript_sequence(self, genome_sequence, transcript_id, exon_type='exon'):
