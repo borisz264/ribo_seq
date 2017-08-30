@@ -77,7 +77,7 @@ class ribo_qc:
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'rRNA_fragment_sizes_multi_plot.pdf')
         g.savefig(outname, transparent=True)
 
-    def plot_read_annotations_summary(self, mapped_only=False, representation_cutoff = 1):
+    def plot_read_annotations_summary(self, mapped_only=False, representation_cutoff = 2):
         dfs = []
         for qc_lib in self.lib_QCs:
             dict_list = [] # a list pf tuples that I wil later cast to a dict
