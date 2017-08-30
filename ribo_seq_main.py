@@ -31,7 +31,7 @@ class experiment:
         self.genome = ribo_utils.genome_sequence(self.settings.get_genome_sequence_files())
         self.settings.write_to_log('loading GTF annotations')
         self.GTF_annotations = ribo_utils.gtf_data(self.settings.get_annotation_GTF_file())
-        #self.initialize_libs()
+        self.initialize_libs()
         self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
 
     def make_ncRNA_mapping_index(self):
@@ -266,7 +266,7 @@ class experiment:
         ribo_utils.make_dir(self.rdir_path('transcript_counts'))
         self.libs = []
 
-        map(lambda lib_settings: ribo_lib.assign_tx_reads(self, self.settings, lib_settings), self.settings.iter_lib_settings())
+        ribo_utils.parmap(lambda lib_settings: ribo_lib.assign_tx_reads(self, self.settings, lib_settings), self.settings.iter_lib_settings(), nprocs = self.threads)
         map(lambda lib_settings: self.initialize_lib(lib_settings), self.settings.iter_lib_settings())
         self.settings.write_to_log('initializing libraries, counting reads, done')
 
