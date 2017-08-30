@@ -482,7 +482,6 @@ class gtf_data():
 
 
     def bin_entries_on_chromosome(self):
-        print 'binning'
         self.chr_to_entry = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         for entry in self.gtf_entries:
             for position_bin in range(int(entry.get_value('start')) / 1000 * 1000,
@@ -677,10 +676,11 @@ class gtf_data():
         ordered_exon_entries = [entry for entry in transcript_entries if entry.is_type(exon_type)]
         ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')))
         # if this transcript is on the minus strand, the exon order needs to be flipped
-        if ordered_exon_entries[0].get_value('strand') == '+':
-            ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')))
-        else:
-            ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')), reverse=True)
+        if len(ordered_exon_entries)>0:
+            if ordered_exon_entries[0].get_value('strand') == '+':
+                ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')))
+            else:
+                ordered_exon_entries.sort(key=lambda x: int(x.get_value('start')), reverse=True)
         return ordered_exon_entries
 
     def transcript_sequence(self, genome_sequence, transcript_id, exon_type='exon'):
@@ -729,14 +729,14 @@ class gtf_data():
         assert strand in ['+','-']
         if strand == '+':
             genomic_CDS_start = int(sorted_CDS_exons[0].get_value('start'))
-            genomic_CDS_end = int(sorted_CDS_exons[-1].get_value('end'))
+            #genomic_CDS_end = int(sorted_CDS_exons[-1].get_value('end'))
             # now, the hard part is finding the start codon
             transcript_leader_length = 0
             for exon in sorted_exons:
-                if exon.get_value('end') < genomic_CDS_start:
+                if int(exon.get_value('end')) < genomic_CDS_start:
                     transcript_leader_length += exon.length()
-                elif exon.get_value('start') <= genomic_CDS_start and exon.get_value('end') > genomic_CDS_start:
-                    transcript_leader_length += genomic_CDS_start-exon.get_value('start')
+                elif int(exon.get_value('start')) <= genomic_CDS_start and int(exon.get_value('end')) > genomic_CDS_start:
+                    transcript_leader_length += genomic_CDS_start-int(exon.get_value('start'))
                     break
             start = transcript_leader_length
             end = transcript_leader_length + CDS_length-1
@@ -744,13 +744,19 @@ class gtf_data():
             genomic_CDS_start = int(sorted_CDS_exons[0].get_value('end'))
             transcript_leader_length = 0
             for exon in sorted_exons:
-                if exon.get_value('start') > genomic_CDS_start:
+                if int(exon.get_value('start')) > genomic_CDS_start:
                     transcript_leader_length += exon.length()
-                elif exon.get_value('end') >= genomic_CDS_start and exon.get_value('start') < genomic_CDS_start:
-                    transcript_leader_length += exon.get_value('end')-genomic_CDS_start
+                elif int(exon.get_value('end')) >= genomic_CDS_start and int(exon.get_value('start')) < genomic_CDS_start:
+                    transcript_leader_length += int(exon.get_value('end'))-genomic_CDS_start
                     break
             start = transcript_leader_length
             end = transcript_leader_length + CDS_length-1
+        '''
+        if transcript_id == 'ENST00000534324.5':
+            print genomic_CDS_start, start, end, CDS_length
+            print sorted_exons
+            print sorted_CDS_exons
+        '''
         return start, end
 
 class gtf_entry():
@@ -763,8 +769,9 @@ class gtf_entry():
         for key in self.secondary_data:
             self.secondary_data[key] = self.secondary_data[key].strip('"')
 
-    #def __repr__(self):
-    #    return self.gtf_file_line
+    def __repr__(self):
+        return '%s %s %s %s %s %s' % (self.get_value('transcript_id'), self.get_value('type'), self.get_value('chr'), self.get_value('strand'),
+                                   self.get_value('start'), self.get_value('end'))
 
     def is_type(self, entry_type):
         """
