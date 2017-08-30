@@ -46,7 +46,7 @@ class ribo_lib:
 
     def name_sorted_counts(self):
         #returns counts for each sequence in pool, sorted by their sequence names, alphabetically
-        return np.array([self.transcripts[sequence_name].fragment_count for sequence_name in
+        return np.array([self.transcripts[tx_id].fragment_count for tx_id in
                          sorted(self.transcripts)])
 
     def name_sorted_rpms(self):
@@ -65,8 +65,8 @@ class ribo_lib:
     def get_sample_name(self):
         return self.lib_settings.sample_name
 
-    def get_counts(self, sequence_name):
-        return self.transcripts[sequence_name].fragment_count
+    def get_counts(self, tx_id):
+        return self.transcripts[tx_id].fragment_count
 
     def get_mappings_with_minimum_reads(self, minimum_reads, names_only = False):
         passing_mappings = set()
@@ -75,7 +75,7 @@ class ribo_lib:
                 passing_mappings.add(mapping)
 
         if names_only:
-            return set([passing_mapping.sequence_name for passing_mapping in passing_mappings])
+            return set([passing_mapping.tx_id for passing_mapping in passing_mappings])
         else:
             return passing_mappings
 
@@ -107,27 +107,27 @@ class ribo_lib:
                  for tx in self.transcripts.values() if tx.is_coding])
         return self.total_mapped_counts[parameter_string]
 
-    def get_rpm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
-        tx_counts = self.transcripts[sequence_name].get_tx_read_count(start_offset, stop_offset, read_end=read_end,
+    def get_rpm(self, tx_id, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        tx_counts = self.transcripts[tx_id].get_tx_read_count(start_offset, stop_offset, read_end=read_end,
                                                                       read_lengths=read_lengths)
         total_counts = self.get_total_tx_reads(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
 
         return (10 ** 6) * float(tx_counts) / float(total_counts)
 
-    def get_rpkm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
-        return self.get_rpm(sequence_name, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) /\
-               self.transcripts[sequence_name].tx_length
+    def get_rpkm(self, tx_id, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        return self.get_rpm(tx_id, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) /\
+               self.transcripts[tx_id].tx_length
 
-    def get_cds_rpm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
-        cds_counts = self.transcripts[sequence_name].get_cds_read_count(start_offset, stop_offset, read_end=read_end,
+    def get_cds_rpm(self, tx_id, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        cds_counts = self.transcripts[tx_id].get_cds_read_count(start_offset, stop_offset, read_end=read_end,
                                                                       read_lengths=read_lengths)
 
         total_counts = self.get_total_cds_reads(start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths)
         return (10 ** 6) * float(cds_counts) / float(total_counts)
 
-    def get_cds_rpkm(self, sequence_name, start_offset, stop_offset, read_end='5p', read_lengths='all'):
-        return self.get_cds_rpm(sequence_name, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) / \
-               (self.transcripts[sequence_name].cds_length-start_offset+stop_offset)
+    def get_cds_rpkm(self, tx_id, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+        return self.get_cds_rpm(tx_id, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) / \
+               (self.transcripts[tx_id].cds_length-start_offset+stop_offset)
 
 class transcript:
     """
@@ -345,10 +345,7 @@ class transcript:
     def second_stop_position(self):
         #find the position of the first nt of the first in-frame stop after the canonical stop codon,
         # relative to the start of the tx
-        print self.full_sequence
-        print self.cds_end
         stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
-        print stop_codon
         if ribo_utils.GENETIC_CODE[stop_codon] == '_':
             for position in range(self.cds_end, self.tx_length, 3):
                 codon = self.full_sequence[position: position+3]
