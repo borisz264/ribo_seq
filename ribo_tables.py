@@ -10,7 +10,7 @@ def make_readthrough_table(experiment):
     for lib in experiment.libs:
         sample_name = lib.lib_settings.sample_name
         sample_names.append(sample_name)
-        tx_w_data = set([tx.sequence_name for tx in lib.transcripts.values() if not tx.compute_readthrough_ratio(16, read_end='3p',
+        tx_w_data = set([tx.tx_id for tx in lib.transcripts.values() if not tx.compute_readthrough_ratio(16, read_end='3p',
                                                                                            read_lengths='all',
                                                                                            cds_cutoff=128) == None ])
         all_genes = all_genes.union(tx_w_data)
@@ -31,7 +31,7 @@ def make_cds_rpkm_table(experiment):
     for lib in experiment.libs:
         sample_name = lib.lib_settings.sample_name
         sample_names.append(sample_name)
-        tx_w_data = set([tx.sequence_name for tx in lib.transcripts.values() ])
+        tx_w_data = set([tx.tx_id for tx in lib.transcripts.values() if tx.is_coding])
         all_genes = all_genes.union(tx_w_data)
     out_name = os.path.join(experiment.settings.get_rdir(), 'tables', 'cds_rpkms.tsv')
     f = open(out_name, 'w')
@@ -47,7 +47,7 @@ def make_cds_counts_table(experiment):
     for lib in experiment.libs:
         sample_name = lib.lib_settings.sample_name
         sample_names.append(sample_name)
-        tx_w_data = set([tx.sequence_name for tx in lib.transcripts.values() ])
+        tx_w_data = set([tx.tx_id for tx in lib.transcripts.values() if tx.is_coding])
         all_genes = all_genes.union(tx_w_data)
     out_name = os.path.join(experiment.settings.get_rdir(), 'tables', 'cds_counts.tsv')
     f = open(out_name, 'w')
@@ -71,11 +71,11 @@ def make_detailed_readthrough_table(experiment, p_site_offset = 16, read_end='5p
         header_items = ['rt_ratio', 'rt_counts', 'cds_counts']
         for item in header_items:
             headers.append('%s_%s' % (sample_name, item))
-        tx_w_data = set([tx.sequence_name for tx in lib.transcripts.values()
+        tx_w_data = set([tx.tx_id for tx in lib.transcripts.values()
                          if tx.compute_readthrough_ratio(p_site_offset, read_end=read_end, read_lengths=read_lengths,
                                                          cds_cutoff=cds_cutoff, log=log, post_cds_start_buffer=post_cds_start_buffer,
                                                          pre_cds_stop_buffer=pre_cds_stop_buffer, pre_extension_stop_buffer=pre_extension_stop_buffer,
-                                                         post_cds_stop_buffer=post_cds_stop_buffer) is not None ])
+                                                         post_cds_stop_buffer=post_cds_stop_buffer) is not None and tx.is_coding ])
         all_genes = all_genes.union(tx_w_data)
     headers.append('cds_length')
     headers.append('readthrough_length')
@@ -127,12 +127,11 @@ def transcriptome_features_table(experiment):
     f.write('tx_id\tstop_codon_context\tsecond_stop_codon\tUTR_length\tTL_length\tCDS_length\t'
             'tx_length\textension_nt_length\tUTR_A_percent\tUTR_T_percent\tUTR_C_percent\tUTR_G_percent\n')
     for tx in all_tx:
-        if not tx.sequence_name == None:
-            values = []
+        if tx.is_coding:
             values=[tx.stop_codon_context(), tx.second_stop_codon(), str(tx.trailer_length), str(tx.leader_length),
                     str(tx.cds_length), str(tx.tx_length), str(tx.readthrough_extension_length()),
                     str(tx.trailer_monomer_fraction('A')), str(tx.trailer_monomer_fraction('T')),
                     str(tx.trailer_monomer_fraction('C')), str(tx.trailer_monomer_fraction('G'))]
             values = [x if x not in [None, 'None'] else '' for x in values]
-            f.write('%s\t%s\n' % (tx.sequence_name, '\t'.join(values)))
+            f.write('%s\t%s\n' % (tx.tx_id, '\t'.join(values)))
     f.close()
