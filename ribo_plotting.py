@@ -254,7 +254,6 @@ def plot_stop_codon_average(experiment, up = 500, down = 100, min_cds_reads = 12
             plot.set_xlabel("nt relative to stop codon", fontsize=8)
         plot.set_ylabel("average density\n (read %s end)" % (read_end), fontsize=8)
         plot.set_xlim(-1*up, down)
-        plot.set_xlim(0, 2)
         minorLocator = AutoMinorLocator(10)
         plot.xaxis.set_minor_locator(minorLocator)
         plot.get_xaxis().set_tick_params(which='both', direction='out')

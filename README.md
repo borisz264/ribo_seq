@@ -35,6 +35,7 @@ This will run the basic read trimming and mapping
 *   FASTX-toolkit (http://hannonlab.cshl.edu/fastx_toolkit/) tested with 0.0.14
 *   seqtk (https://github.com/lh3/seqtk)
 *   pigz (https://zlib.net/pigz/)
+*   tally (http://wwwdev.ebi.ac.uk/enright-dev/kraken/reaper/src/reaper-latest/doc/tally.html, http://wwwdev.ebi.ac.uk/enright-dev/kraken/reaper/src/)
 
 #### Python dependencies (for python 2.7) installed with pip install (on mac, a local install with --user may be recommended)
 *   simplejson (3.11.1)

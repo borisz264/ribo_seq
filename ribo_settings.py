@@ -203,6 +203,14 @@ class ribo_lib_settings:
     def get_fastq_gz_file(self):
         return self.fastq_gz_filehandle
 
+    def get_deduplicated_reads(self):
+        deduplicated_reads = os.path.join(
+          self.experiment_settings.get_rdir(),
+          'deduplicated',
+          '%(sample_name)s.fastq.gz' %
+           {'sample_name': self.sample_name})
+        return deduplicated_reads
+
     def get_trimmed_reads(self):
         trimmed_reads = os.path.join(
           self.experiment_settings.get_rdir(),
@@ -290,6 +298,10 @@ class ribo_lib_settings:
     def adaptorless_reads_exist(self):
         trimmed_reads = self.get_adaptor_trimmed_reads()
         return ribo_utils.file_exists(trimmed_reads)
+
+    def deduplicated_reads_exist(self):
+        deduplicated_reads = self.get_deduplicated_reads()
+        return ribo_utils.file_exists(deduplicated_reads)
 
     def trimmed_reads_exist(self):
         trimmed_reads = self.get_trimmed_reads()

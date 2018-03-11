@@ -30,6 +30,7 @@ class experiment:
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.make_ncRNA_mapping_index()
         self.make_genome_mapping_index()
+        self.deduplicate_reads()
         self.trim_reads()
         self.remove_adaptor()
         self.map_reads_to_ncrna()
@@ -84,6 +85,30 @@ class experiment:
             subprocess.Popen(command_to_run, shell=True).wait()
         self.settings.write_to_log('STAR index ready')
 
+    def deduplicate_reads(self):
+        for lib_settings in self.settings.iter_lib_settings():
+            if not lib_settings.deduplicated_reads_exist():
+                break
+        else: #else clause executes if break did not occur
+            self.settings.write_to_log('using existing deduplicated reads')
+            return
+        self.settings.write_to_log('deduplicating reads with tally')
+        ribo_utils.make_dir(self.rdir_path('deduplicated'))
+        ribo_utils.parmap(lambda lib_setting: self.deduplicate_reads_one_lib(lib_setting), self.settings.iter_lib_settings(),
+                          nprocs=self.num_instances)
+        self.settings.write_to_log('done deduplicating reads with tally')
+
+    def deduplicate_reads_one_lib(self, lib_settings):
+        lib_settings.write_to_log('deduplicating reads with tally')
+        bases_to_trim = self.settings.get_property('trim_5p')
+        command = 'tally -i %s -o %s --with-quality 1>>%s 2>>%s' % (lib_settings.get_fastq_gz_file(),
+                                                                    lib_settings.get_deduplicated_reads(),
+                                                                    lib_settings.get_log(),
+                                                                    lib_settings.get_log())
+        lib_settings.write_to_log(command)
+        subprocess.Popen(command, shell=True).wait()
+        lib_settings.write_to_log('deduplicating reads with tally done')
+
     def trim_reads(self):
         if not self.settings.get_property('force_retrim'):
             for lib_settings in self.settings.iter_lib_settings():
@@ -104,7 +129,7 @@ class experiment:
         lib_settings.write_to_log('trimming_reads')
         bases_to_trim = self.settings.get_property('trim_5p')
         command = 'seqtk trimfq -b %d -e 0 %s | pigz -p %d > %s 2>>%s' % (bases_to_trim,
-                                                                                 lib_settings.get_fastq_gz_file(),
+                                                                                 lib_settings.get_deduplicated_reads(),
                                                                                  threads_per_instance,
                                                                                  lib_settings.get_trimmed_reads(),
                                                                                  lib_settings.get_log())
