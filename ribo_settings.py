@@ -50,7 +50,7 @@ class ribo_settings:
                     'alignsjdboverhangmin', 'alignsjoverhangmin', 'alignintronmax', 'five_prime_p_offset']
         #float_keys = []
         str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'star_ncrna_dir', 'genome_sequence_dir', 'ncrna_sequence_dir', 'annotation_gtf_file']
-        boolean_keys = ['force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop']
+        boolean_keys = ['deduplicate_reads', 'force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['genome_sequence_dir', 'annotation_gtf_file']

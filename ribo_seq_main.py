@@ -100,11 +100,18 @@ class experiment:
 
     def deduplicate_reads_one_lib(self, lib_settings):
         lib_settings.write_to_log('deduplicating reads with tally')
-        bases_to_trim = self.settings.get_property('trim_5p')
-        command = 'tally -i %s -o %s --with-quality 1>>%s 2>>%s' % (lib_settings.get_fastq_gz_file(),
-                                                                    lib_settings.get_deduplicated_reads(),
-                                                                    lib_settings.get_log(),
-                                                                    lib_settings.get_log())
+
+        if self.settings.get_property('deduplicate_reads'):
+            command = 'tally -i %s -o %s --with-quality 1>>%s 2>>%s' % (lib_settings.get_fastq_gz_file(),
+                                                                        lib_settings.get_deduplicated_reads(),
+                                                                        lib_settings.get_log(),
+                                                                        lib_settings.get_log())
+        else:
+            lib_settings.write_to_log('deduplication turned off, just copying input file')
+            command = 'cp %s %s 1>>%s 2>>%s' % (lib_settings.get_fastq_gz_file(),
+                                                                        lib_settings.get_deduplicated_reads(),
+                                                                        lib_settings.get_log(),
+                                                                        lib_settings.get_log())
         lib_settings.write_to_log(command)
         subprocess.Popen(command, shell=True).wait()
         lib_settings.write_to_log('deduplicating reads with tally done')
