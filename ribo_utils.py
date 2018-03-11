@@ -97,6 +97,15 @@ def file_exists(fname):
         raise ValueError('Input File %s cannot be read' % fname)
     return True
 
+def file_len(fname):
+    if fname.endswith('.gz'):
+        f = gzip.open(fname)
+    else:
+        f = open(fname)
+    for i, l in enumerate(f):
+        pass
+    return i + 1
+
 def tsv_to_dict(filename, header = True, delimiter = '\t', key_column = 0, convert_to_float = False):
     """
     Will return a dict index first by the row labels, then by the column headers
@@ -729,6 +738,7 @@ class gtf_data():
         :return: CDS start and end, relative to the sense transcript orientation.
          Transcription start site is zero
         """
+        sorted_tx_exons = self.sorted_exons(transcript_id, exon_type=['exon'])
         if self.add_3_for_stop:
             sorted_CDS_exons = self.sorted_exons(transcript_id, exon_type=['CDS', 'stop_codon'])
             CDS_length = self.spliced_length(transcript_id, exon_type=['CDS', 'stop_codon'])
@@ -744,7 +754,7 @@ class gtf_data():
             #genomic_CDS_end = int(sorted_CDS_exons[-1].get_value('end'))
             # now, the hard part is finding the start codon
             transcript_leader_length = 0
-            for exon in sorted_CDS_exons:
+            for exon in sorted_tx_exons:
                 if int(exon.get_value('end')) < genomic_CDS_start:
                     transcript_leader_length += exon.length()
                 elif int(exon.get_value('start')) <= genomic_CDS_start and int(exon.get_value('end')) > genomic_CDS_start:
@@ -755,7 +765,7 @@ class gtf_data():
         else:
             genomic_CDS_start = int(sorted_CDS_exons[0].get_value('end'))
             transcript_leader_length = 0
-            for exon in sorted_CDS_exons:
+            for exon in sorted_tx_exons:
                 if int(exon.get_value('start')) > genomic_CDS_start:
                     transcript_leader_length += exon.length()
                 elif int(exon.get_value('end')) >= genomic_CDS_start and int(exon.get_value('start')) < genomic_CDS_start:
@@ -763,12 +773,6 @@ class gtf_data():
                     break
             start = transcript_leader_length
             end = transcript_leader_length + CDS_length-1
-        '''
-        if transcript_id == 'ENST00000534324.5':
-            print genomic_CDS_start, start, end, CDS_length
-            print sorted_exons
-            print sorted_CDS_exons
-        '''
         return start, end
 
 class gtf_entry():

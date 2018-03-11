@@ -84,6 +84,7 @@ class ribo_qc:
         for qc_lib in self.lib_QCs:
             dict_list = [] # a list pf tuples that I wil later cast to a dict
             dict_list.append(('sample',qc_lib.lib_settings.sample_name))
+            dict_list.append(('input reads', qc_lib.input_reads))
             dict_list.append(('reads processed', qc_lib.adaptor_stats['reads processed']))
             dict_list.append(('<%d nt' % (self.get_property('min_post_trimming_length')), qc_lib.adaptor_stats['reads processed'] - qc_lib.adaptor_stats['trimmed reads available']))
             for ncrna_reference in qc_lib.ncrna_reference_counts:
@@ -230,6 +231,7 @@ class single_lib_qc():
         """
         self.parent_qc = parent_qc
         self.lib_settings = lib_settings
+        self.input_reads = ribo_utils.file_len(lib_settings.get_fastq_gz_file())/4
         self.get_adaptor_trimming_stats()
         self.ncrna_samfile = pysam.AlignmentFile(self.lib_settings.get_ncrna_mapped_reads(), "rb")
         self.count_ncrna_mapping_reads()
