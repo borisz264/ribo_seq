@@ -257,7 +257,8 @@ class experiment:
     def map_one_library_to_genome(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --genomeDir %s --readFilesIn %s ' \
-                         '--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM --alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
+                         '--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
+                         '--alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
                          '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                          ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(),
