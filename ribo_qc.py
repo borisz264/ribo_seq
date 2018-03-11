@@ -6,6 +6,8 @@ import ribo_utils
 import numpy as np
 import pysam
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy
@@ -352,10 +354,13 @@ class single_lib_qc():
                     else:  # alignment on - strand
                         strand = '-'
                     annotation_entry = self.parent_qc.GTF_annotations.find_smallest_annotation_at_position(chromosome, strand, alignment.reference_start, alignment.reference_end)
-                    if annotation_entry == None:
+                    if annotation_entry is None or annotation_entry.get_value('type') is None:
                         self.annotation_mapping_counts[uniqueness]['not annotated']+=1
                     elif annotation_entry.get_value('type') in ['transcript', 'exon']:
-                        self.annotation_mapping_counts[uniqueness][annotation_entry.get_value('transcript_type')]+=1
+                        if annotation_entry.get_value('transcript_type') is None:
+                            self.annotation_mapping_counts[uniqueness][annotation_entry.get_value('type')]+=1
+                        else:
+                            self.annotation_mapping_counts[uniqueness][annotation_entry.get_value('transcript_type')]+=1
                     elif annotation_entry.get_value('type') == 'UTR':
                         # need to differentiate 5' from 3' UTR
                         type = self.parent_qc.GTF_annotations.utr_type(annotation_entry)

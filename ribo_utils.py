@@ -430,8 +430,11 @@ class genome_sequence():
             return sequence
 
 class gtf_data():
-    def __init__(self, gtf_file):
+    def __init__(self, gtf_file, add_3_for_stop = False):
         self.gtf_entries = []
+        # sometimes stop codons are not included in the "CDS" annottion in GTF files and  instead under their own
+        # 3nt entries. To deal with this situation, add_3_for_stop should be set to true
+        self.add_3_for_stop = add_3_for_stop
         self.fields = ['chr', 'source', 'type', 'start', 'end', 'score', 'strand', 'frame', 'additional']
         # note: levels 1 and 2 are verified and manually annotated, repectively, 3 are automatically annotated
         #self.additional_mandatory_keys = ['gene_id', 'transcript_id', 'gene_type', 'gene_status', 'gene_name',
@@ -449,7 +452,7 @@ class gtf_data():
         self.shortest_annotations = {'+':defaultdict(lambda : defaultdict(dict)),
                                      '-':defaultdict(lambda : defaultdict(dict))}
         # a dict of {chromosome: {strand: {start and/or endposition, rounded DOWN to the nearest thousand: [entries overlapping this range, sorted, first by start position, then by length}}
-        # Each unit of 1000 (a mille) can also potentially entries with the neighboring ones
+        # Each unit of 1000 (a mille) can also potentially share entries with the neighboring ones
         # So shorter entries will precede longer ones.
         #I'm using integer division to do the rounding
         self.chr_to_entry = None
@@ -481,11 +484,11 @@ class gtf_data():
         gtf.close()
 
 
-    def bin_entries_on_chromosome(self):
+    def bin_entries_on_chromosome(self, bin_size=1000):
         self.chr_to_entry = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         for entry in self.gtf_entries:
-            for position_bin in range(int(entry.get_value('start')) / 1000 * 1000,
-                                      (int(entry.get_value('end')) / 1000 * 1000) + 1000, 1000):
+            for position_bin in range(int(entry.get_value('start')) / bin_size * bin_size,
+                                      (int(entry.get_value('end')) / bin_size * bin_size) + bin_size, bin_size):
                 self.chr_to_entry[entry.get_value('chr')][entry.get_value('strand')][position_bin].append(entry)
                 assert len(self.chr_to_entry[entry.get_value('chr')][entry.get_value('strand')][position_bin]) == len(
                     set(self.chr_to_entry[entry.get_value('chr')][entry.get_value('strand')][position_bin]))
@@ -513,12 +516,20 @@ class gtf_data():
         if len(transcripts) == 1:
             return [sorted(transcripts)[0]]
         else:
-            sorted_transcripts = sorted(transcripts,
-                                        key=lambda x: int(self.spliced_length(x, exon_type=['CDS', 'stop_codon'])),
-                                        reverse=True)
-            longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type=['CDS', 'stop_codon'])
-            return [x for x in sorted_transcripts if
-                    self.spliced_length(x, exon_type=['CDS', 'stop_codon']) == longest_CDS_length]
+            if self.add_3_for_stop:
+                sorted_transcripts = sorted(transcripts,
+                                            key=lambda x: int(self.spliced_length(x, exon_type=['CDS', 'stop_codon'])),
+                                            reverse=True)
+                longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type=['CDS', 'stop_codon'])
+                return [x for x in sorted_transcripts if
+                        self.spliced_length(x, exon_type=['CDS', 'stop_codon']) == longest_CDS_length]
+            else:
+                sorted_transcripts = sorted(transcripts,
+                                            key=lambda x: int(self.spliced_length(x, exon_type=['CDS'])),
+                                            reverse=True)
+                longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type=['CDS'])
+                return [x for x in sorted_transcripts if
+                        self.spliced_length(x, exon_type=['CDS']) == longest_CDS_length]
 
     def longest_tx(self, gene_id, starting_subset=None):
         if starting_subset == None:
@@ -530,8 +541,8 @@ class gtf_data():
         else:
             sorted_transcripts = sorted(transcripts, key=lambda x: int(self.spliced_length(x, exon_type='exon')),
                                         reverse=True)
-            longest_CDS_length = self.spliced_length(sorted_transcripts[0], exon_type='exon')
-            return [x for x in sorted_transcripts if self.spliced_length(x, exon_type='exon') == longest_CDS_length]
+            longest_tx_length = self.spliced_length(sorted_transcripts[0], exon_type='exon')
+            return [x for x in sorted_transcripts if self.spliced_length(x, exon_type='exon') == longest_tx_length]
 
     def pick_all_longest_CDS_transcripts(self):
         # picks transcripts with longest CDS
@@ -552,7 +563,6 @@ class gtf_data():
                 else:
                     genes_with_ties.append(gene_id)
                     chosen_tx.append(tx_with_longest_tx[0])
-        #print 'genes with ties for longest CDS and tx:', len(genes_with_ties)
         assert len(chosen_tx) == len(set(chosen_tx))
         return chosen_tx
 
@@ -585,7 +595,7 @@ class gtf_data():
         out_gtf.close()
     '''
     def find_annotations_overlapping_range(self, chromosome, strand, start_position, end_position, type_restrictions=None,
-                                           type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene']):
+                                           type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene'], bin_size=1000):
         """
         :param chromosome: 
         :param strand: 
@@ -594,10 +604,11 @@ class gtf_data():
         :param type_restrictions: 
         :return: list of entries (shortest first) that overlap the given range in any way. Partially or completely. 
         """
+
         if self.chr_to_entry is None:
             self.bin_entries_on_chromosome()
         overlaps = []
-        for position_bin in range(int(start_position) / 1000 * 1000, (int(end_position) / 1000 * 1000) + 1000, 1000):
+        for position_bin in range(int(start_position) / bin_size * bin_size, (int(end_position) / bin_size * bin_size) + bin_size, bin_size):
             for entry in self.chr_to_entry[chromosome][strand][position_bin]:
                 if type_restrictions != None and entry.get_value('type') not in type_restrictions:
                     continue
@@ -619,7 +630,7 @@ class gtf_data():
         :return: 
         '''
         #if not (start_position in self.shortest_annotations[strand][chr] and  end_position in self.shortest_annotations[strand][chr][start_position]):
-        entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order)
+        entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order, bin_size=10)
         if len(entries)>0:
             #self.shortest_annotations[strand][chr][start_position][end_position] = entries[0]
             return entries[0]
@@ -639,8 +650,6 @@ class gtf_data():
         else:
             transcript_id = entry.get_value('transcript_id')
             cds_exons = self.sorted_exons(transcript_id, exon_type='CDS')
-            #print entry
-            #print cds_exons
             if entry.get_value('strand') == '+' and int(entry.get_value('end')) < int(cds_exons[0].get_value('start')):
                 return '5p_UTR'
             elif entry.get_value('strand') == '-' and int(entry.get_value('start')) > int(cds_exons[0].get_value('end')):
@@ -720,9 +729,12 @@ class gtf_data():
         :return: CDS start and end, relative to the sense transcript orientation.
          Transcription start site is zero
         """
-        sorted_exons = self.sorted_exons(transcript_id, exon_type='exon')
-        sorted_CDS_exons = self.sorted_exons(transcript_id, exon_type=['CDS', 'stop_codon'])
-        CDS_length = self.spliced_length(transcript_id, exon_type=['CDS', 'stop_codon'])
+        if self.add_3_for_stop:
+            sorted_CDS_exons = self.sorted_exons(transcript_id, exon_type=['CDS', 'stop_codon'])
+            CDS_length = self.spliced_length(transcript_id, exon_type=['CDS', 'stop_codon'])
+        else:
+            sorted_CDS_exons = self.sorted_exons(transcript_id, exon_type=['CDS'])
+            CDS_length = self.spliced_length(transcript_id, exon_type=['CDS'])
         if len(sorted_CDS_exons) == 0:
             return None, None
         strand = sorted_CDS_exons[0].get_value('strand')
@@ -732,7 +744,7 @@ class gtf_data():
             #genomic_CDS_end = int(sorted_CDS_exons[-1].get_value('end'))
             # now, the hard part is finding the start codon
             transcript_leader_length = 0
-            for exon in sorted_exons:
+            for exon in sorted_CDS_exons:
                 if int(exon.get_value('end')) < genomic_CDS_start:
                     transcript_leader_length += exon.length()
                 elif int(exon.get_value('start')) <= genomic_CDS_start and int(exon.get_value('end')) > genomic_CDS_start:
@@ -743,7 +755,7 @@ class gtf_data():
         else:
             genomic_CDS_start = int(sorted_CDS_exons[0].get_value('end'))
             transcript_leader_length = 0
-            for exon in sorted_exons:
+            for exon in sorted_CDS_exons:
                 if int(exon.get_value('start')) > genomic_CDS_start:
                     transcript_leader_length += exon.length()
                 elif int(exon.get_value('end')) >= genomic_CDS_start and int(exon.get_value('start')) < genomic_CDS_start:
@@ -764,8 +776,9 @@ class gtf_entry():
         #self.gtf_file_line = gtf_file_line
         ll = gtf_file_line.rstrip('\n').split('\t')
         self.primary_data = dict(zip(parent_gtf.fields, ll))
-        additional_pairs = self.primary_data['additional'].split('; ')
-        self.secondary_data = dict([pair.split(' ') for pair in additional_pairs])
+        if 'additional' in self.primary_data:
+            additional_pairs = self.primary_data['additional'].split('; ')
+            self.secondary_data = dict([pair.split(' ') for pair in additional_pairs if pair != ''])
         for key in self.secondary_data:
             self.secondary_data[key] = self.secondary_data[key].strip('"')
 

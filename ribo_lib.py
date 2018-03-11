@@ -19,7 +19,8 @@ def assign_tx_reads(experiment, experiment_settings, lib_settings):
         for tx_id in  GTF_annotations.pick_all_longest_CDS_transcripts():
             chr = GTF_annotations.tx_to_chr[tx_id]
             if chr in genome.genome_sequence:
-                transcripts[tx_id] = transcript(tx_id, GTF_annotations, genome, samfile, reads_reversed=experiment_settings.get_property('reads_reversed'))
+                transcripts[tx_id] = transcript(tx_id, GTF_annotations, genome, samfile,
+                                                reads_reversed=experiment_settings.get_property('reads_reversed'))
         samfile.close()
         ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
     lib_settings.write_to_log('done counting reads or loading counts')
@@ -352,8 +353,9 @@ class transcript:
                 if codon in ribo_utils.GENETIC_CODE and ribo_utils.GENETIC_CODE[codon] == '_':
                     return position
         else:
-            #pass
-            print self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
+            pass
+
+            #print 'first stop is weird', self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
         return None
 
     def second_stop_codon(self):

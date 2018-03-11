@@ -46,11 +46,11 @@ class ribo_settings:
         # TODO: Add new parameters and comments to settings files
 
         int_keys = ['comparison_read_cutoff', 'min_post_trimming_length', 'max_post_trimming_length',
-                     'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity', 'outfiltermultimapnmax',
-                    'alignsjdboverhangmin', 'alignsjoverhangmin', 'five_prime_p_offset']
+                     'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity', 'outfiltermultimapnmax', 'outfiltermismatchnmax',
+                    'alignsjdboverhangmin', 'alignsjoverhangmin', 'alignintronmax', 'five_prime_p_offset']
         #float_keys = []
         str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'star_ncrna_dir', 'genome_sequence_dir', 'ncrna_sequence_dir', 'annotation_gtf_file']
-        boolean_keys = ['force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed']
+        boolean_keys = ['force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['genome_sequence_dir', 'annotation_gtf_file']
@@ -80,7 +80,6 @@ class ribo_settings:
             settings[k] = simplejson.loads(settings[k])
         self.fqdir = settings['fastq_dir']
         self.sample_names = settings['sample_names']
-        #for paired end reads, there are now 2 fastq files per sample, at least that's how MIT provides the data.
         self.fastq_gz_files = settings['fastq_gz_files']
         self.fastq_gz_file_handles = [os.path.join(self.fqdir, fastq_gz_file) for fastq_gz_file in self.fastq_gz_files]
         for file_handle in self.fastq_gz_file_handles:

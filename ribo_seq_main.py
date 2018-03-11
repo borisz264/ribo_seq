@@ -2,6 +2,8 @@ __author__ = 'boris zinshteyn'
 """
 Intended for processing of ribosome footprint profiling data from mammalian cells
 """
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.rcParams['pdf.fonttype'] = 42 #leaves most text as actual text in PDFs, not outlines
 import os
@@ -19,6 +21,11 @@ class experiment:
     def __init__(self, settings, threads):
         self.threads = threads
         self.settings = settings
+        self.all_settings = [lib_setting for lib_setting in self.settings.iter_lib_settings()]
+        self.num_datasets = len(self.all_settings)
+        self.num_instances = min(self.num_datasets, self.threads)
+        self.threads_per_instance = max(self.threads/self.num_instances-1, 1)
+
         self.settings.write_to_log('Initializing experiment %s' % self.settings.get_property('experiment_name'))
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.make_ncRNA_mapping_index()
@@ -30,7 +37,7 @@ class experiment:
         self.settings.write_to_log('loading genome sequence')
         self.genome = ribo_utils.genome_sequence(self.settings.get_genome_sequence_files())
         self.settings.write_to_log('loading GTF annotations')
-        self.GTF_annotations = ribo_utils.gtf_data(self.settings.get_annotation_GTF_file())
+        self.GTF_annotations = ribo_utils.gtf_data(self.settings.get_annotation_GTF_file(), add_3_for_stop=self.settings.get_property('add_3_for_stop'))
         self.initialize_libs()
         self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
 
@@ -69,9 +76,8 @@ class experiment:
             ribo_utils.make_dir(self.settings.get_property('star_genome_dir'))
         if make_index:
             self.settings.write_to_log('building STAR index')
-            command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --sjdbGTFfile %s --sjdbOverhang %d --genomeSAsparseD %d 1>>%s 2>>%s' % (
+            command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --genomeSAsparseD %d 1>>%s 2>>%s' % (
                 self.threads, self.settings.get_property('star_genome_dir'), self.settings.get_genome_sequence_dir(),
-                self.settings.get_annotation_GTF_file(), self.settings.get_property('max_post_trimming_length')-1,
                 self.settings.get_property('star_index_sparsity'),
                 self.settings.get_log(), self.settings.get_log())
             self.settings.write_to_log(command_to_run)
@@ -88,30 +94,23 @@ class experiment:
                 return
         else:
             self.settings.write_to_log('read trimming forced')
-        self.settings.write_to_log('trimming reads')
+        self.settings.write_to_log('trimming reads with seqtk')
         ribo_utils.make_dir(self.rdir_path('trimmed'))
-        ribo_utils.parmap(lambda lib_setting: self.trim_reads_one_lib(lib_setting),
-                          self.settings.iter_lib_settings(), nprocs=self.threads)
-        self.settings.write_to_log('done trimming reads')
+        ribo_utils.parmap(lambda lib_setting: self.trim_reads_one_lib(lib_setting, self.threads_per_instance), self.settings.iter_lib_settings(),
+                          nprocs=self.num_instances)
+        self.settings.write_to_log('done trimming reads with seqtk')
 
-    def trim_reads_one_lib(self, lib_settings):
-        lib_settings.write_to_log('read trimming')
-        """
-        -x specifies the 3' adaptor to trim from the forward read
-        -Q specifies the lowest acceptable mean read quality before trimming
-        -l specifies the minimum post-trimming read length
-        -L specifies the maximum post-trimming read length
-        -o is the output prefix
-        --threads specifies number of threads to use
-        """
-        command_to_run = 'gunzip -c %s | fastx_trimmer -f %d -z -o %s 1>>%s 2>>%s' % (
-            lib_settings.get_fastq_gz_file(),
-            self.settings.get_property('trim_5p')+1,
-            lib_settings.get_trimmed_reads(),
-            lib_settings.get_log(), lib_settings.get_log())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell=True).wait()
-        lib_settings.write_to_log('read trimming done')
+    def trim_reads_one_lib(self, lib_settings, threads_per_instance):
+        lib_settings.write_to_log('trimming_reads')
+        bases_to_trim = self.settings.get_property('trim_5p')
+        command = 'seqtk trimfq -b %d -e 0 %s | pigz -p %d > %s 2>>%s' % (bases_to_trim,
+                                                                                 lib_settings.get_fastq_gz_file(),
+                                                                                 threads_per_instance,
+                                                                                 lib_settings.get_trimmed_reads(),
+                                                                                 lib_settings.get_log())
+        lib_settings.write_to_log(command)
+        subprocess.Popen(command, shell=True).wait()
+        lib_settings.write_to_log('trimming_reads done')
 
     def remove_adaptor(self):
         if not self.settings.get_property('force_retrim'):
@@ -125,8 +124,8 @@ class experiment:
             self.settings.write_to_log('adaptor removal forced')
         self.settings.write_to_log('removing adaptors')
         ribo_utils.make_dir(self.rdir_path('adaptor_removed'))
-        map(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads),
-                          self.settings.iter_lib_settings())
+        ribo_utils.parmap(lambda lib_setting: self.remove_adaptor_one_lib(lib_setting, self.threads_per_instance),
+                          self.settings.iter_lib_settings(), nprocs=self.num_instances)
         self.settings.write_to_log('done removing adaptors')
 
     def remove_adaptor_one_lib(self, lib_settings, threads):
@@ -150,7 +149,7 @@ class experiment:
             lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
-        compression_command = 'gzip %s-trimmed.fastq' % (lib_settings.get_adaptor_trimmed_reads(prefix_only=True))
+        compression_command = 'pigz -p %d %s-trimmed.fastq' % (threads, lib_settings.get_adaptor_trimmed_reads(prefix_only=True))
         lib_settings.write_to_log(compression_command)
         subprocess.Popen(compression_command, shell=True).wait()
         lib_settings.write_to_log('adaptor trimming done')
@@ -171,7 +170,8 @@ class experiment:
             self.settings.write_to_log('remapping forced')
         self.settings.write_to_log('mapping reads')
         ribo_utils.make_dir(self.rdir_path('ncrna_mapped_reads'))
-        map(lambda lib_setting: self.map_one_library_to_rrna(lib_setting, self.threads), self.settings.iter_lib_settings())
+        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_rrna(lib_setting, self.threads_per_instance),
+                          self.settings.iter_lib_settings(), nprocs=self.threads_per_instance)
         self.settings.write_to_log( 'finished mapping reads to noncoding RNA')
 
     def map_one_library_to_rrna(self, lib_settings, threads):
@@ -218,25 +218,30 @@ class experiment:
             self.settings.write_to_log('remapping forced')
         self.settings.write_to_log('mapping reads to genome')
         ribo_utils.make_dir(self.rdir_path('genome_mapped_reads'))
-        map(lambda lib_setting: self.map_one_library_to_genome(lib_setting, self.threads), self.settings.iter_lib_settings())
+        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_genome(lib_setting, self.threads_per_instance),
+                          self.settings.iter_lib_settings(), nprocs=self.num_instances)
         self.settings.write_to_log( 'finished mapping reads to genome')
 
     def map_one_library_to_genome(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --genomeDir %s --readFilesIn %s ' \
-                         '--outSAMtype BAM SortedByCoordinate --alignSJDBoverhangMin %d --alignSJoverhangMin %d ' \
-                         '--outFilterType BySJout --outFilterMultimapNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
-                         ' --quantMode TranscriptomeSAM --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
+                         '--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM --alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
+                         '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                         ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_genome_dir(),
                           lib_settings.get_ncrna_unmapped_reads(),
                           self.settings.get_property('alignsjdboverhangmin'),
+                          self.settings.get_property('alignintronmax'),
+                          self.settings.get_property('annotation_gtf_file'),
                           self.settings.get_property('alignsjoverhangmin'),
                           self.settings.get_property('outfiltermultimapnmax'),
+                          self.settings.get_property('outfiltermismatchnmax'),
                           lib_settings.get_genome_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
         #sort transcript-mapped bam file
-        command_to_run = 'samtools sort %s -o %s.temp_sorted.bam 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
+        command_to_run = 'samtools sort -@ %d -f %s %s.temp_sorted.bam 1>>%s 2>>%s' % (threads, lib_settings.get_transcript_mapped_reads(),
+                                                                                                       lib_settings.get_transcript_mapped_reads(),
                                                                           lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
@@ -294,7 +299,7 @@ class experiment:
 
         ribo_plotting.plot_start_codon_average(self, up=100, down=100, min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
                                                read_end='3p', read_lengths='all')
-        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=128,
+        ribo_plotting.plot_stop_codon_average(self, up=100, down=100, min_cds_reads=self.settings.get_property('comparison_read_cutoff'),
                                                read_end='3p', read_lengths='all')
 
         ribo_plotting.plot_fragment_length_distributions(self)
