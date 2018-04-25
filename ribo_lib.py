@@ -7,8 +7,7 @@ import numpy as np
 import sys
 import math
 def assign_tx_reads(experiment, experiment_settings, lib_settings):
-    #TODO: explicit handling of 5'end untemplated U?
-    #TODO: figure out how to handle molecular barcoding
+
     lib_settings.write_to_log('counting reads or loading counts')
     if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
         lib_settings.write_to_log("counting BAM reads")
@@ -20,7 +19,10 @@ def assign_tx_reads(experiment, experiment_settings, lib_settings):
             chr = GTF_annotations.tx_to_chr[tx_id]
             if chr in genome.genome_sequence:
                 transcripts[tx_id] = transcript(tx_id, GTF_annotations, genome, samfile,
-                                                reads_reversed=experiment_settings.get_property('reads_reversed'))
+                                                reads_reversed=experiment_settings.get_property('reads_reversed'),
+                                                forbid_non_polyA_soft_clip=lib_settings.get_property('forbid_non_polya_soft_clip'),
+                                                atail_purity_cutoff=lib_settings.get_property('atail_purity_cutoff')
+                                                )
         samfile.close()
         ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
     lib_settings.write_to_log('done counting reads or loading counts')
@@ -142,7 +144,8 @@ class transcript:
         Enrichment relative to input library
 
     """
-    def __init__(self, tx_id, GTF_annotations, genome, sam_file, reads_reversed = False):
+    def __init__(self, tx_id, GTF_annotations, genome, sam_file, reads_reversed = False, forbid_non_polyA_soft_clip = False,
+                 atail_purity_cutoff=1.0):
         #self.GTF_annotations = GTF_annotations
         self.tx_length = GTF_annotations.spliced_length(tx_id, exon_type='exon')
         self.exon_starts, self.exon_ends = GTF_annotations.exon_boundaries(tx_id)
@@ -162,6 +165,7 @@ class transcript:
         self.full_sequence = GTF_annotations.transcript_sequence(genome, self.tx_id, exon_type='exon')
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
+        self.polyA_fragment_3p_lengths_at_position = defaultdict(dict)  # will map position to a list of polyA tailed fragment lengths with 5' ends at that position
         self.fragment_5p_lengths_at_position = defaultdict(dict)  # will map position to a list of fragment lengths with 5' ends at that position
         self.fragment_3p_lengths_at_position = defaultdict(dict) # will map position to a list of fragment lengths with 3' ends at that position
         self.fragment_count = 0
@@ -174,14 +178,33 @@ class transcript:
             assert multiplicity > 0
             if multiplicity == 1:
                 if reads_reversed:
-                    fragment_start = read.reference_end
+                    fragment_start = read.reference_end+1
                     fragment_end = read.reference_start
                 else:
                     fragment_start = read.reference_start #0-based start of fragment
-                    fragment_end = read.reference_end
+                    fragment_end = read.reference_end-1
                 # get read length from sequence, or CIGAR string if unavailable
                 fragment_length = read.infer_query_length(always=False)
                 assert fragment_length != 0
+
+                # query_alignment_sequence=seq[query_alignment_start:query_alignment_end]
+                # check if the last aligned position in the read is the last position in read
+                # query_alignment_end: end index of the aligned query portion of the sequence (0-based, exclusive)
+                # This the index just past the last base in seq that is not soft-clipped.
+                soft_clipped_sequence = read.query_sequence[read.query_alignment_end:]
+                soft_clipped_length = len(soft_clipped_sequence)
+                if soft_clipped_length > 0:
+                    numA = len([find.start() for find in re.finditer('[aA]', soft_clipped_sequence)])
+                    a_frac_in_tail = float(numA)/float(len(soft_clipped_sequence))
+                    if a_frac_in_tail >= atail_purity_cutoff:
+                        #print soft_clipped_sequence, numA, soft_clipped_length, a_frac_in_tail, atail_purity_cutoff, a_frac_in_tail >= atail_purity_cutoff
+                        if fragment_length not in self.polyA_fragment_3p_lengths_at_position[fragment_end]:
+                            self.polyA_fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
+                        self.polyA_fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
+                    elif forbid_non_polyA_soft_clip:
+                        continue
+
+
                 self.fragment_5p_ends_at_position[fragment_start] += 1
                 self.fragment_3p_ends_at_position[fragment_end] += 1
                 self.fragment_count += 1
@@ -209,13 +232,14 @@ class transcript:
         #this regex will NOT return overlapping sequences
         return [m.start() for m in re.finditer(subsequence, self.full_sequence)]
 
-    def get_read_end_positions(self, read_end = '5p', read_lengths = 'all'):
+    def get_read_end_positions(self, read_end = '5p', read_lengths = 'all', polyA_only=False):
         '''
         :param read_end:
         :param read_lengths:
         :return:
         '''
         if read_lengths == 'all':
+
             if read_end == '5p':
                 read_dict = self.fragment_5p_ends_at_position
             elif read_end == '3p':
@@ -234,6 +258,22 @@ class transcript:
                 print 'unidentified read end option', read_end
                 sys.exit()
             for position in super_dict:
+                read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths if read_length in super_dict[position]])
+        return read_dict
+
+    def get_polyA_read_3p_end_positions(self, read_lengths = 'all'):
+        '''
+        :param read_end:
+        :param read_lengths:
+        :return:
+        '''
+        read_dict = {}
+
+        super_dict = self.polyA_fragment_3p_lengths_at_position
+        for position in super_dict:
+            if read_lengths == 'all':
+                read_dict[position] = sum([super_dict[position][read_length] for read_length in super_dict[position]])
+            else:
                 read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths if read_length in super_dict[position]])
         return read_dict
 
@@ -277,6 +317,27 @@ class transcript:
         assert len(counts_array) == len (inclusion_array)
         return counts_array, inclusion_array
 
+    def get_CDS_polyA_3p_read_counts_array(self, anchor, left_offset, right_offset, read_lengths ='all'):
+        '''
+
+        :param anchor: the "reference" or "zero" position for the array. For example the CDS start or stop
+        :param left_offset: position relative to anchor to start the array, negative numbers will be upstream
+        :param right_offset: position relative to anchor to end the array, negative numbers will be upstream
+        :param read_end: '5p' or 3p', which end of reads to count.
+        :param read_lengths: read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :return:
+        counts_array: an array of the read counts over the window
+        inclusion_array: an array of 1 and zero to indicate which positions are within the transcript boundaries.
+        '''
+        assert right_offset > left_offset
+        read_dict = self.get_polyA_read_3p_end_positions(read_lengths = read_lengths)
+        counts_array = np.array([read_dict[position] if position in read_dict and position>=0 else 0
+                        for position in range(anchor + left_offset, anchor + right_offset + 1)])
+        inclusion_array = np.array([1 if position>=0 and position < self.tx_length else 0
+                           for position in range(anchor + left_offset, anchor + right_offset + 1)])
+        assert len(counts_array) == len (inclusion_array)
+        return counts_array, inclusion_array
+
     def get_avg_read_lengths_array(self, anchor, left_offset, right_offset, read_end ='5p'):
         '''
 
@@ -299,7 +360,7 @@ class transcript:
         assert len(counts_array) == len (length_sum_array)
         return length_sum_array, counts_array
 
-    def get_cds_read_count(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
+    def get_cds_read_count(self, start_offset, stop_offset, read_end='5p', read_lengths='all', polyA_only = False):
         '''
 
         :param start_offset: position relative to CDS start to open the count window, negative numbers will be upstream
@@ -309,6 +370,17 @@ class transcript:
         :return:
         '''
         read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
+        return sum([read_dict[position] for position in read_dict
+                    if position>=self.cds_start+start_offset and position<=self.cds_end+stop_offset])
+
+    def get_cds_polyA_count(self, start_offset, stop_offset, read_lengths='all'):
+        '''
+        :param start_offset: position relative to CDS start to open the count window, negative numbers will be upstream
+        :param stop_offset: position relative to CDS stop to close the count window, negative numbers will be upstream
+        :param read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :return:
+        '''
+        read_dict = self.get_polyA_read_3p_end_positions(read_lengths=read_lengths)
         return sum([read_dict[position] for position in read_dict
                     if position>=self.cds_start+start_offset and position<=self.cds_end+stop_offset])
 
@@ -415,6 +487,16 @@ class transcript:
                     else:
                         return readthrough
         return None
+
+    def relative_codon_positions(self, target_codon):
+        #return the canonical stop codon sequence
+        assert target_codon in ribo_utils.GENETIC_CODE
+        positions = []
+        for codon_position in range(self.cds_start, self.cds_end, 3):
+            codon = self.full_sequence[codon_position: codon_position+3]
+            if codon == target_codon:
+                positions.append(codon_position)
+        return positions
 
     def stop_codon_context(self):
         #return the canonical stop codon sequence
