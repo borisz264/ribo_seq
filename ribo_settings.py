@@ -48,9 +48,9 @@ class ribo_settings:
         int_keys = ['comparison_read_cutoff', 'min_post_trimming_length', 'max_post_trimming_length',
                      'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity', 'outfiltermultimapnmax', 'outfiltermismatchnmax',
                     'alignsjdboverhangmin', 'alignsjoverhangmin', 'alignintronmax', 'five_prime_p_offset']
-        #float_keys = []
+        float_keys = ['atail_purity_cutoff']
         str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'star_ncrna_dir', 'genome_sequence_dir', 'ncrna_sequence_dir', 'annotation_gtf_file']
-        boolean_keys = ['deduplicate_reads', 'force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop']
+        boolean_keys = ['deduplicate_reads', 'force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop', 'forbid_non_polya_soft_clip']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['genome_sequence_dir', 'annotation_gtf_file']
@@ -65,8 +65,8 @@ class ribo_settings:
             settings[k] = int(settings[k])
         for k in str_keys:
             settings[k] = settings[k]
-        #for k in float_keys:
-        #    settings[k] = float(settings[k])
+        for k in float_keys:
+            settings[k] = float(settings[k])
         for k in boolean_keys:
             if not settings[k].lower() in ['true', 'false']:
                 raise ValueError(
@@ -269,6 +269,10 @@ class ribo_lib_settings:
     def get_genome_mapped_reads(self):
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'genome_mapped_reads', '%(sample_name)sAligned.sortedByCoord.out.bam' % {'sample_name': self.sample_name})
         return mapped_reads
+
+    def get_genome_unmapped_reads(self):
+        unmapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'genome_mapped_reads', '%(sample_name)sUnmapped.out.mate1' % {'sample_name': self.sample_name})
+        return unmapped_reads
 
     def get_transcript_mapped_reads(self):
         mapped_reads = os.path.join(self.experiment_settings.get_rdir(), 'genome_mapped_reads', '%(sample_name)sAligned.toTranscriptome.out.bam' % {'sample_name': self.sample_name})
