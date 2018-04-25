@@ -202,18 +202,17 @@ class experiment:
             self.settings.write_to_log('remapping forced')
         self.settings.write_to_log('mapping reads')
         ribo_utils.make_dir(self.rdir_path('ncrna_mapped_reads'))
-        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_rrna(lib_setting, self.threads_per_instance),
+        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_ncrna(lib_setting, self.threads_per_instance),
                           self.settings.iter_lib_settings(), nprocs=self.threads_per_instance)
         self.settings.write_to_log( 'finished mapping reads to noncoding RNA')
 
-    def map_one_library_to_rrna(self, lib_settings, threads):
+    def map_one_library_to_ncrna(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
-                         '--outSAMtype BAM SortedByCoordinate --outFilterMultimapNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s ' \
+                         '--outSAMtype BAM SortedByCoordinate --outFilterMultimapNmax 20 --outWigType wiggle read1_5p --outFileNamePrefix %s ' \
                          '--outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                          (threads, self.settings.get_star_ncrna_dir(),
                           lib_settings.get_adaptor_trimmed_reads(),
-                          self.settings.get_property('outfiltermultimapnmax'),
                           lib_settings.get_ncrna_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
@@ -257,7 +256,7 @@ class experiment:
     def map_one_library_to_genome(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
         command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --genomeDir %s --readFilesIn %s ' \
-                         '--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
+                         '--outSAMtype BAM SortedByCoordinate --quantTranscriptomeBan Singleend --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
                          '--alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
                          '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                          ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
