@@ -165,7 +165,10 @@ class transcript:
         self.full_sequence = GTF_annotations.transcript_sequence(genome, self.tx_id, exon_type='exon')
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
         self.fragment_3p_ends_at_position = defaultdict(int) #will map position to # of reads there
-        self.polyA_fragment_3p_lengths_at_position = defaultdict(dict)  # will map position to a list of polyA tailed fragment lengths with 5' ends at that position
+        self.polyA_fragment_5p_lengths_at_position = defaultdict(dict)  # will map position to a list of polyA tailed fragment lengths with 5' ends at that position
+        self.polyA_fragment_3p_lengths_at_position = defaultdict(dict)  # will map position to a list of polyA tailed fragment lengths with 3' ends at that position
+        self.polyA_length_by_fragment_lengths_at_5p_position = defaultdict(dict)  # will map {position:{fragment_length:{polyA_length: count}} with 5' ends at that position
+        self.polyA_length_by_fragment_lengths_at_3p_position = defaultdict(dict)  # will map {position:{fragment_length:{polyA_length: count}} with 3' ends at that position
         self.fragment_5p_lengths_at_position = defaultdict(dict)  # will map position to a list of fragment lengths with 5' ends at that position
         self.fragment_3p_lengths_at_position = defaultdict(dict) # will map position to a list of fragment lengths with 3' ends at that position
         self.fragment_count = 0
@@ -201,6 +204,19 @@ class transcript:
                         if fragment_length not in self.polyA_fragment_3p_lengths_at_position[fragment_end]:
                             self.polyA_fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
                         self.polyA_fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
+
+                        if fragment_length not in self.polyA_fragment_5p_lengths_at_position[fragment_start]:
+                            self.polyA_fragment_5p_lengths_at_position[fragment_start][fragment_length] = 0
+                        self.polyA_fragment_5p_lengths_at_position[fragment_start][fragment_length] += 1
+
+                        #also save polyA length info for each position
+                        if fragment_length not in self.polyA_length_by_fragment_lengths_at_5p_position[fragment_start]:
+                            self.polyA_length_by_fragment_lengths_at_5p_position[fragment_start][fragment_length] = defaultdict(int)
+                        self.polyA_length_by_fragment_lengths_at_5p_position[fragment_start][fragment_length][soft_clipped_length]+=1
+
+                        if fragment_length not in self.polyA_length_by_fragment_lengths_at_3p_position[fragment_end]:
+                            self.polyA_length_by_fragment_lengths_at_3p_position[fragment_end][fragment_length] = defaultdict(int)
+                        self.polyA_length_by_fragment_lengths_at_3p_position[fragment_end][fragment_length][soft_clipped_length]+=1
                     elif forbid_non_polyA_soft_clip:
                         continue
 
@@ -232,7 +248,7 @@ class transcript:
         #this regex will NOT return overlapping sequences
         return [m.start() for m in re.finditer(subsequence, self.full_sequence)]
 
-    def get_read_end_positions(self, read_end = '5p', read_lengths = 'all', polyA_only=False):
+    def get_read_end_positions(self, read_end = '5p', read_lengths = 'all'):
         '''
         :param read_end:
         :param read_lengths:
@@ -261,20 +277,32 @@ class transcript:
                 read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths if read_length in super_dict[position]])
         return read_dict
 
-    def get_polyA_read_3p_end_positions(self, read_lengths = 'all'):
+    def get_polyA_read_end_positions(self, read_lengths = 'all', read_end = '5p', min_polyA_length=1):
         '''
         :param read_end:
         :param read_lengths:
         :return:
         '''
-        read_dict = {}
-
-        super_dict = self.polyA_fragment_3p_lengths_at_position
-        for position in super_dict:
+        read_dict = defaultdict(int)
+        if read_end == '5p':
+            super_dict = self.polyA_length_by_fragment_lengths_at_5p_position
+        elif read_end == '3p':
+            super_dict = self.polyA_length_by_fragment_lengths_at_3p_position
+        else:
+            print 'unidentified read end option', read_end
+            sys.exit()
+        for position in super_dict.keys():
             if read_lengths == 'all':
-                read_dict[position] = sum([super_dict[position][read_length] for read_length in super_dict[position]])
+                for read_length in super_dict[position]:
+                    for polyA_length in super_dict[position][read_length]:
+                        if polyA_length >= min_polyA_length:
+                            read_dict[position] += super_dict[position][read_length][polyA_length]
             else:
-                read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths if read_length in super_dict[position]])
+                for read_length in read_lengths:
+                    if read_length in super_dict[position]:
+                        for polyA_length in super_dict[position][read_length]:
+                            if polyA_length >= min_polyA_length:
+                                read_dict[position] += super_dict[position][read_length][polyA_length]
         return read_dict
 
     def get_positional_length_sums(self, read_end = '5p'):
@@ -317,7 +345,7 @@ class transcript:
         assert len(counts_array) == len (inclusion_array)
         return counts_array, inclusion_array
 
-    def get_CDS_polyA_3p_read_counts_array(self, anchor, left_offset, right_offset, read_lengths ='all'):
+    def get_CDS_polyA_read_counts_array(self, anchor, left_offset, right_offset, read_lengths ='all', read_end = '5p', min_polyA_length=1):
         '''
 
         :param anchor: the "reference" or "zero" position for the array. For example the CDS start or stop
@@ -330,7 +358,8 @@ class transcript:
         inclusion_array: an array of 1 and zero to indicate which positions are within the transcript boundaries.
         '''
         assert right_offset > left_offset
-        read_dict = self.get_polyA_read_3p_end_positions(read_lengths = read_lengths)
+        read_dict = self.get_polyA_read_end_positions(read_lengths = read_lengths, read_end=read_end,
+                                                      min_polyA_length=min_polyA_length)
         counts_array = np.array([read_dict[position] if position in read_dict and position>=0 else 0
                         for position in range(anchor + left_offset, anchor + right_offset + 1)])
         inclusion_array = np.array([1 if position>=0 and position < self.tx_length else 0
@@ -360,7 +389,7 @@ class transcript:
         assert len(counts_array) == len (length_sum_array)
         return length_sum_array, counts_array
 
-    def get_cds_read_count(self, start_offset, stop_offset, read_end='5p', read_lengths='all', polyA_only = False):
+    def get_cds_read_count(self, start_offset, stop_offset, read_end='5p', read_lengths='all'):
         '''
 
         :param start_offset: position relative to CDS start to open the count window, negative numbers will be upstream
@@ -373,14 +402,14 @@ class transcript:
         return sum([read_dict[position] for position in read_dict
                     if position>=self.cds_start+start_offset and position<=self.cds_end+stop_offset])
 
-    def get_cds_polyA_count(self, start_offset, stop_offset, read_lengths='all'):
+    def get_cds_polyA_count(self, start_offset, stop_offset, read_end='5p', read_lengths='all', min_polyA_length=1):
         '''
         :param start_offset: position relative to CDS start to open the count window, negative numbers will be upstream
         :param stop_offset: position relative to CDS stop to close the count window, negative numbers will be upstream
         :param read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
         :return:
         '''
-        read_dict = self.get_polyA_read_3p_end_positions(read_lengths=read_lengths)
+        read_dict = self.get_polyA_read_end_positions(read_lengths=read_lengths, read_end=read_end, min_polyA_length=min_polyA_length)
         return sum([read_dict[position] for position in read_dict
                     if position>=self.cds_start+start_offset and position<=self.cds_end+stop_offset])
 
