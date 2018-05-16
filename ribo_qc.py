@@ -82,7 +82,7 @@ class ribo_qc:
     def plot_read_annotations_summary(self, mapped_only=False, representation_cutoff = 2):
         dfs = []
         for qc_lib in self.lib_QCs:
-            dict_list = [] # a list pf tuples that I wil later cast to a dict
+            dict_list = [] # a list of tuples that I wil later cast to a dict
             dict_list.append(('sample',qc_lib.lib_settings.sample_name))
             dict_list.append(('input reads', qc_lib.input_reads))
             dict_list.append(('reads processed', qc_lib.adaptor_stats['reads processed']))
@@ -103,16 +103,22 @@ class ribo_qc:
         consolidated_summary = pd.DataFrame()
         tRNA_headers = []
         rRNA_headers = []
+        snRNA_headers = []
+
         for header in list(read_summary.columns.values):
-            if 'tRNA' in header or 'MT' in header:
+            if 'tRNA' in header or 'MT' in header or '(' in header:
                 tRNA_headers.append(header)
-            elif 'rRNA' in header:
+            elif 'rRNA' in header or 'RDN' in header:
                 rRNA_headers.append(header)
+            elif 'snR' in header:
+                snRNA_headers.append(header)
             else:
                 consolidated_summary[header] = read_summary[header]
 
         consolidated_summary['tRNA'] = read_summary[tRNA_headers].sum(axis=1)
         consolidated_summary['rRNA'] = read_summary[rRNA_headers].sum(axis=1)
+        consolidated_summary['snRNA'] = read_summary[snRNA_headers].sum(axis=1)
+
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'consolidated_read_annotation_summary.tsv')
         consolidated_summary.to_csv(outname, sep='\t', index_label=False)
         consolidated_percent_summary = consolidated_summary[
@@ -126,17 +132,17 @@ class ribo_qc:
         totals = consolidated_percent_summary.sum()  # sum each column
         multi_totals = {}
         unique_totals = {}
-        for header in list(consolidated_summary.columns.values):
+        for header in list(consolidated_percent_summary.columns.values):
             sp = header.split(' mapping')
             if sp[0] == 'multiple':
                 multi_totals[header] = totals[header]
             elif sp[0] == 'unique':
                 unique_totals[header] = totals[header]
         #sort into annotations that are represented above a certain percentage
-        top_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if multi_totals[anno]>=representation_cutoff]
-        other_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if multi_totals[anno]<representation_cutoff]
-        top_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if unique_totals[anno]>=representation_cutoff]
-        other_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if unique_totals[anno]<representation_cutoff]
+        top_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if consolidated_percent_summary[anno][0]>=representation_cutoff]
+        other_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if consolidated_percent_summary[anno][0]<representation_cutoff]
+        top_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if consolidated_percent_summary[anno][0]>=representation_cutoff]
+        other_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if consolidated_percent_summary[anno][0]<representation_cutoff]
         for header in list(consolidated_percent_summary.columns.values):
             if 'mapping' in header:
                 if header in top_multi or header in top_unique:
@@ -148,9 +154,10 @@ class ribo_qc:
         top_summary['unique other'] = consolidated_percent_summary[other_unique].sum(axis=1)
 
         top_summary['unmapped'] = top_summary['reads processed'] - consolidated_percent_summary[
-            [header for header in list(consolidated_percent_summary.columns.values) if header != 'reads processed']].sum(
+            [header for header in list(consolidated_percent_summary.columns.values) if header not in ['reads processed', 'input reads']]].sum(
             axis=1)
         del top_summary['reads processed']
+        del top_summary['input reads']
 
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'top_read_annotation_summary.tsv')
         top_summary.to_csv(outname, sep='\t')
