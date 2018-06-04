@@ -35,10 +35,11 @@ def make_cds_rpkm_table(experiment):
         all_genes = all_genes.union(tx_w_data)
     out_name = os.path.join(experiment.settings.get_rdir(), 'tables', 'cds_rpkms.tsv')
     f = open(out_name, 'w')
-    f.write('tx_id\t%s\n' % '\t'.join(sample_names))
+    f.write('tx_id\tgene_name\t%s\n' % '\t'.join(sample_names))
     for tx_name in all_genes:
-        values = [str(lib.get_cds_rpkm(tx_name, 75, -30, read_end='3p', read_lengths='all')) for lib in experiment.libs]
-        f.write('%s\t%s\n' % (tx_name, '\t'.join(values)))
+        gene_name = lib.get_transcript(tx_name).common_name
+        values = [str(lib.get_cds_rpkm(tx_name, 30, 0, read_end='3p', read_lengths='all')) for lib in experiment.libs]
+        f.write('%s\t%s\t%s\n' % (tx_name, gene_name, '\t'.join(values)))
     f.close()
 
 def make_cds_counts_table(experiment):
@@ -51,10 +52,11 @@ def make_cds_counts_table(experiment):
         all_genes = all_genes.union(tx_w_data)
     out_name = os.path.join(experiment.settings.get_rdir(), 'tables', 'cds_counts.tsv')
     f = open(out_name, 'w')
-    f.write('tx_id\t%s\n' % '\t'.join(sample_names))
+    f.write('tx_id\tgene_name\t%s\n' % '\t'.join(sample_names))
     for tx_name in all_genes:
-        values = [str(lib.get_transcript(tx_name).get_cds_read_count(75, -30, read_end='3p', read_lengths='all')) for lib in experiment.libs]
-        f.write('%s\t%s\n' % (tx_name, '\t'.join(values)))
+        gene_name = lib.get_transcript(tx_name).common_name
+        values = [str(lib.get_transcript(tx_name).get_cds_read_count(30, 0, read_end='3p', read_lengths='all')) for lib in experiment.libs]
+        f.write('%s\t%s\t%s\n' % (tx_name, gene_name, '\t'.join(values)))
     f.close()
 
 def make_detailed_readthrough_table(experiment, p_site_offset = 16, read_end='5p', read_lengths='all', cds_cutoff=128,
