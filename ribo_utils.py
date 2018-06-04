@@ -452,7 +452,8 @@ class gtf_data():
         self.transcript_to_entries = defaultdict(set)
         self.gene_to_entries = defaultdict(set)
         self.genes_to_tx = defaultdict(set)
-        self.tx_to_genes = {}
+        self.tx_to_genes = {} #tx id to gene id
+        self.tx_to_gene_names = {} #tx id to common gene name
         self.tx_to_strand = {}
         self.tx_to_chr = {}
         #self.feature_type_summary = defaultdict(int)
@@ -479,7 +480,9 @@ class gtf_data():
                 #self.transcript_type_summary[new_entry.get_value('transcript_type')] += 1
                 gene_id = new_entry.get_value('gene_id')
                 transcript_id = new_entry.get_value('transcript_id')
+                gene_name = new_entry.get_value('gene_name')
                 self.tx_to_genes[transcript_id] = gene_id
+                self.tx_to_gene_names[transcript_id] = gene_name
                 strand = new_entry.get_value('strand')
                 self.tx_to_strand[transcript_id] = strand
                 chromosome = new_entry.get_value('chr')
@@ -784,7 +787,7 @@ class gtf_entry():
             additional_pairs = self.primary_data['additional'].split('; ')
             self.secondary_data = dict([pair.split(' ') for pair in additional_pairs if pair != ''])
         for key in self.secondary_data:
-            self.secondary_data[key] = self.secondary_data[key].strip('"')
+            self.secondary_data[key] = self.secondary_data[key].strip(';').strip('"')
 
     def __repr__(self):
         return '%s %s %s %s %s %s' % (self.get_value('transcript_id'), self.get_value('type'), self.get_value('chr'), self.get_value('strand'),

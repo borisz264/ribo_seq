@@ -154,6 +154,7 @@ class transcript:
         self.strand = GTF_annotations.tx_to_strand[tx_id]
         self.tx_id = tx_id
         self.gene_id = GTF_annotations.tx_to_genes[tx_id]
+        self.common_name = GTF_annotations.tx_to_gene_names[tx_id]
         if self.cds_end is None or self.cds_start is None:
             self.is_coding = False
         else:
@@ -527,13 +528,13 @@ class transcript:
                 positions.append(codon_position)
         return positions
 
-    def stop_codon_context(self):
+    def stop_codon_context(self, nuc_upstream=0, nuc_downstream=0):
         #return the canonical stop codon sequence
 
-        stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
+        stop_codon_context = self.full_sequence[self.cds_end-2-nuc_upstream: self.cds_end+1+nuc_downstream]
 
         #assert ribo_utils.GENETIC_CODE[stop_codon] == '_'
-        return self.full_sequence[self.cds_end-15: self.cds_end+12]
+        return stop_codon_context
 
     def trailer_sequence(self):
         #return sequence of 3' trailer (3' UTR)
