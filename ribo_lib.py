@@ -337,7 +337,7 @@ class transcript:
         counts_array: an array of the read counts over the window
         inclusion_array: an array of 1 and zero to indicate which positions are within the transcript boundaries.
         '''
-        assert right_offset > left_offset
+        assert right_offset >= left_offset
         read_dict = self.get_read_end_positions(read_end = read_end, read_lengths = read_lengths)
         counts_array = np.array([read_dict[position] if position in read_dict and position>=0 else 0
                         for position in range(anchor + left_offset, anchor + right_offset + 1)])
@@ -358,7 +358,7 @@ class transcript:
         counts_array: an array of the read counts over the window
         inclusion_array: an array of 1 and zero to indicate which positions are within the transcript boundaries.
         '''
-        assert right_offset > left_offset
+        assert right_offset >= left_offset
         read_dict = self.get_polyA_read_end_positions(read_lengths = read_lengths, read_end=read_end,
                                                       min_polyA_length=min_polyA_length)
         counts_array = np.array([read_dict[position] if position in read_dict and position>=0 else 0
