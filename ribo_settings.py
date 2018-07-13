@@ -140,7 +140,7 @@ class ribo_settings:
         fasta_files = set()
         for file in os.listdir(genome_dir):
             for ending in allowed_endings:
-                if file.endswith(ending):
+                if not file.startswith('.') and file.endswith(ending):
                     fasta_files.add(os.path.join(self.get_property('genome_sequence_dir'), file))
         return sorted(fasta_files)
 
