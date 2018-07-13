@@ -47,6 +47,11 @@ class ribo_lib:
     def __repr__(self):
         return "ribo-seq lib for %s" % (self.lib_settings.sample_name)
 
+    def iter_transcripts(self):
+        #iterate over all transcript objects in library:
+        for transcript in self.transcripts.values():
+            yield transcript
+
     def name_sorted_counts(self):
         #returns counts for each sequence in pool, sorted by their sequence names, alphabetically
         return np.array([self.transcripts[tx_id].fragment_count for tx_id in
@@ -519,7 +524,7 @@ class transcript:
         return None
 
     def relative_codon_positions(self, target_codon):
-        #return the canonical stop codon sequence
+        #return the positions of the given codon relative to CDS start
         assert target_codon in ribo_utils.GENETIC_CODE
         positions = []
         for codon_position in range(self.cds_start, self.cds_end, 3):
@@ -527,6 +532,16 @@ class transcript:
             if codon == target_codon:
                 positions.append(codon_position)
         return positions
+
+    def get_inframe_seq_positions(self, target_seq):
+        #return the given sequence if in frame
+        positions = []
+        for codon_position in range(self.cds_start, self.cds_end, 3):
+            seq = self.full_sequence[codon_position: codon_position+len(target_seq)]
+            if seq == target_seq:
+                positions.append(codon_position)
+        return positions
+
 
     def stop_codon_context(self, nuc_upstream=0, nuc_downstream=0):
         #return the canonical stop codon sequence
