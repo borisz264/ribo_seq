@@ -25,7 +25,6 @@ class experiment:
         self.num_datasets = len(self.all_settings)
         self.num_instances = min(self.num_datasets, self.threads)
         self.threads_per_instance = max(self.threads/self.num_instances-1, 1)
-
         self.settings.write_to_log('Initializing experiment %s' % self.settings.get_property('experiment_name'))
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.make_ncRNA_mapping_index()
@@ -203,7 +202,7 @@ class experiment:
         self.settings.write_to_log('mapping reads')
         ribo_utils.make_dir(self.rdir_path('ncrna_mapped_reads'))
         ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_ncrna(lib_setting, self.threads_per_instance),
-                          self.settings.iter_lib_settings(), nprocs=self.threads_per_instance)
+                          self.settings.iter_lib_settings(), nprocs=self.num_instances)
         self.settings.write_to_log( 'finished mapping reads to noncoding RNA')
 
     def map_one_library_to_ncrna(self, lib_settings, threads):
@@ -249,9 +248,13 @@ class experiment:
             self.settings.write_to_log('remapping forced')
         self.settings.write_to_log('mapping reads to genome')
         ribo_utils.make_dir(self.rdir_path('genome_mapped_reads'))
+        self.genome_num_instances = min(min(self.num_datasets, self.threads), 20)
+        self.genome_threads_per_instance = max(self.threads / self.genome_num_instances - 1, 1)
+
+
         ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_genome(lib_setting, self.threads_per_instance),
                           self.settings.iter_lib_settings(), nprocs=self.num_instances)
-        self.settings.write_to_log( 'finished mapping reads to genome')
+        self.settings.write_to_log('finished mapping reads to genome')
 
     def map_one_library_to_genome(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
