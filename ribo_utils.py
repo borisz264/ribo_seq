@@ -467,6 +467,7 @@ class gtf_data():
         #I'm using integer division to do the rounding
         self.chr_to_entry = None
         self.add_gtf_data(gtf_file)
+
     def add_gtf_data(self, gtf_file):
         if gtf_file.endswith('.gz'):
             gtf = gzip.open(gtf_file)
@@ -494,7 +495,6 @@ class gtf_data():
                         self.genes_to_tx[gene_id].add(transcript_id)
         #self.gtf_entries.sort(key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end'))))
         gtf.close()
-
 
     def bin_entries_on_chromosome(self, bin_size=1000):
         self.chr_to_entry = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
