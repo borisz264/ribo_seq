@@ -204,12 +204,15 @@ class ribo_lib_settings:
         return self.fastq_gz_filehandle
 
     def get_deduplicated_reads(self):
-        deduplicated_reads = os.path.join(
-          self.experiment_settings.get_rdir(),
-          'deduplicated',
-          '%(sample_name)s.fastq.gz' %
-           {'sample_name': self.sample_name})
-        return deduplicated_reads
+        if self.get_property('deduplicate_reads'):
+            deduplicated_reads = os.path.join(
+              self.experiment_settings.get_rdir(),
+              'deduplicated',
+              '%(sample_name)s.fastq.gz' %
+               {'sample_name': self.sample_name})
+            return deduplicated_reads
+        else:
+            return self.get_fastq_gz_file()
 
     def get_trimmed_reads(self):
         trimmed_reads = os.path.join(
@@ -313,6 +316,17 @@ class ribo_lib_settings:
 
     def ncrna_mapped_reads_exist(self):
         mapped_reads = self.get_ncrna_mapped_reads()
+        return ribo_utils.file_exists(mapped_reads)
+
+    def ncrna_mapping_finished(self):
+        unmapped_reads_summary = os.path.join(self.experiment_settings.get_rdir(), 'ncrna_mapped_reads',
+                                      '%(sample_name)sLog.final.out' % {'sample_name': self.sample_name})
+
+        return ribo_utils.file_exists(unmapped_reads_summary)
+
+
+    def ncrna_unmapped_reads_exist(self):
+        mapped_reads = self.get_ncrna_unmapped_reads()
         return ribo_utils.file_exists(mapped_reads)
 
     def genome_mapped_reads_exist(self):
