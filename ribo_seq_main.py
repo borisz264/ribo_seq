@@ -7,6 +7,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.rcParams['pdf.fonttype'] = 42 #leaves most text as actual text in PDFs, not outlines
 import os
+import sys
 import argparse
 import subprocess
 
@@ -25,6 +26,10 @@ class experiment:
         self.num_datasets = len(self.all_settings)
         self.num_instances = min(self.num_datasets, self.threads)
         self.threads_per_instance = max(self.threads/self.num_instances-1, 1)
+
+        self.genome_num_instances = min(min(self.num_datasets, self.threads), 5)
+        self.genome_threads_per_instance = max(self.threads / self.genome_num_instances, 1)
+
         self.settings.write_to_log('Initializing experiment %s' % self.settings.get_property('experiment_name'))
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.make_ncRNA_mapping_index()
@@ -106,6 +111,10 @@ class experiment:
                                                                         lib_settings.get_log(),
                                                                         lib_settings.get_log())
         else:
+            #as currently written, this should NEVER trigger, since the deduplicated reads are just redirected to the
+            # fastqgz file in ribo_settings.py
+            print "something wrong with deduplication settings!!!"
+            sys.exit()
             lib_settings.write_to_log('deduplication turned off, just copying input file')
             command = 'cp %s %s 1>>%s 2>>%s' % (lib_settings.get_fastq_gz_file(),
                                                                         lib_settings.get_deduplicated_reads(),
@@ -201,16 +210,16 @@ class experiment:
             self.settings.write_to_log('remapping forced')
         self.settings.write_to_log('mapping reads')
         ribo_utils.make_dir(self.rdir_path('ncrna_mapped_reads'))
-        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_ncrna(lib_setting, self.threads_per_instance),
-                          self.settings.iter_lib_settings(), nprocs=self.num_instances)
+        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_ncrna(lib_setting, self.genome_threads_per_instance),
+                          [lib_setting for lib_setting in self.settings.iter_lib_settings() if not lib_setting.ncrna_mapping_finished()], nprocs=self.genome_num_instances)
         self.settings.write_to_log( 'finished mapping reads to noncoding RNA')
 
     def map_one_library_to_ncrna(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
-        command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
-                         '--outSAMtype BAM SortedByCoordinate --outFilterMultimapNmax 20 --outWigType wiggle read1_5p --outFileNamePrefix %s ' \
+        command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --seedPerWindowNmax 25 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
+                         '--outSAMtype BAM SortedByCoordinate --outFilterMultimapScoreRange 0 --outFilterMismatchNmax 3 --outFilterMismatchNoverLmax 0.1 --outFilterMultimapNmax 10 --outSAMmultNmax 1 --outFileNamePrefix %s ' \
                          '--outReadsUnmapped Fastx 1>>%s 2>>%s' %\
-                         (threads, self.settings.get_star_ncrna_dir(),
+                         (threads, threads, self.settings.get_star_ncrna_dir(),
                           lib_settings.get_adaptor_trimmed_reads(),
                           lib_settings.get_ncrna_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
@@ -226,10 +235,10 @@ class experiment:
         #subprocess.Popen(command_to_run, shell = True).wait()
         #command_to_run = 'samtools index %s' % (lib_settings.get_transcript_mapped_reads())
         #lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell = True).wait()
-        command_to_run = 'samtools index %s' % (lib_settings.get_ncrna_mapped_reads())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell=True).wait()
+        #subprocess.Popen(command_to_run, shell = True).wait()
+        #command_to_run = 'samtools index %s' % (lib_settings.get_ncrna_mapped_reads())
+        #lib_settings.write_to_log(command_to_run)
+        #subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('mapping_reads done')
 
     def map_reads_to_genome(self):
@@ -248,22 +257,19 @@ class experiment:
             self.settings.write_to_log('remapping forced')
         self.settings.write_to_log('mapping reads to genome')
         ribo_utils.make_dir(self.rdir_path('genome_mapped_reads'))
-        self.genome_num_instances = min(min(self.num_datasets, self.threads), 20)
-        self.genome_threads_per_instance = max(self.threads / self.genome_num_instances - 1, 1)
 
-
-        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_genome(lib_setting, self.threads_per_instance),
-                          self.settings.iter_lib_settings(), nprocs=self.num_instances)
+        ribo_utils.parmap(lambda lib_setting: self.map_one_library_to_genome(lib_setting, self.genome_threads_per_instance),
+                          self.settings.iter_lib_settings(), nprocs=self.genome_num_instances)
         self.settings.write_to_log('finished mapping reads to genome')
 
     def map_one_library_to_genome(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
-        command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --genomeDir %s --readFilesIn %s ' \
+        command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
                          '--outSAMtype BAM SortedByCoordinate --quantTranscriptomeBan Singleend --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
                          '--alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
                          '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                          ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
-                         (threads, self.settings.get_star_genome_dir(),
+                         (threads, threads, self.settings.get_star_genome_dir(),
                           lib_settings.get_ncrna_unmapped_reads(),
                           self.settings.get_property('alignsjdboverhangmin'),
                           self.settings.get_property('alignintronmax'),
