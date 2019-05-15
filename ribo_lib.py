@@ -453,10 +453,10 @@ class transcript:
     def second_stop_position(self):
         #find the position of the first nt of the first in-frame stop after the canonical stop codon,
         # relative to the start of the tx
-        stop_codon = self.full_sequence[self.cds_end-3: self.cds_end]
+        stop_codon = self.full_sequence[self.cds_end-3: self.cds_end].upper()
         if ribo_utils.GENETIC_CODE[stop_codon] == '_':
             for position in range(self.cds_end, self.tx_length, 3):
-                codon = self.full_sequence[position: position+3]
+                codon = self.full_sequence[position: position+3].upper()
                 if codon in ribo_utils.GENETIC_CODE and ribo_utils.GENETIC_CODE[codon] == '_':
                     return position
         else:
