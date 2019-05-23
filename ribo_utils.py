@@ -589,23 +589,6 @@ class gtf_data():
         assert len(chosen_tx) == len(set(chosen_tx))
         return chosen_tx
 
-    '''
-    def write_transcript_entries_to_file(self, out_file, transcript_ids=None):
-        if transcript_ids == None:
-            transcript_ids = self.transcript_to_entries.keys()
-        if out_file.endswith('.gz'):
-            out_gtf = gzip.open(out_file, 'w')
-        else:
-            out_gtf = open(out_file, 'w')
-        transcript_entries = []
-        for transcript_id in transcript_ids:
-            for transcript_entry in self.transcript_to_entries[transcript_id]:
-                transcript_entries.append(transcript_entry)
-        for transcript_entry in sorted(transcript_entries,
-                                       key=lambda x: (x.get_value('chr'), int(x.get_value('start')), int(x.get_value('end')))):
-            out_gtf.write(transcript_entry.gtf_file_line)
-        out_gtf.close()
-    '''
     def find_annotations_overlapping_range(self, chromosome, strand, start_position, end_position, type_restrictions=None,
                                            type_sorting_order=['CDS', 'UTR', 'start_codon', 'stop_codon', 'Selenocysteine', 'tRNA', 'exon', 'transcript', 'gene'], bin_size=1000):
         """
@@ -778,6 +761,17 @@ class gtf_data():
             end = transcript_leader_length + CDS_length-1
         return start, end
 
+    def write_transcript_sequences_to_FASTA(self, out_file, genome_sequence, transcript_ids=None, exon_type='exon'):
+        if transcript_ids == None:
+            transcript_ids = self.transcript_to_entries.keys()
+        if out_file.endswith('.gz'):
+            out_fasta = gzip.open(out_file, 'w')
+        else:
+            out_fasta = open(out_file, 'w')
+        for transcript_id in transcript_ids:
+            out_fasta.write('>%s_%s\n' % (transcript_id, sorted(self.transcript_to_entries[transcript_id])[0].get_value('gene_name')))
+            out_fasta.write('%s\n' % self.transcript_sequence(genome_sequence, transcript_id, exon_type=exon_type))
+        out_fasta.close()
 class gtf_entry():
     def __init__(self, gtf_file_line, parent_gtf):
         #self.gtf_file_line = gtf_file_line

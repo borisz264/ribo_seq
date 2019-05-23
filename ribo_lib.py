@@ -12,21 +12,26 @@ def assign_tx_reads(experiment, experiment_settings, lib_settings):
     if experiment_settings.get_property('force_recount') or not lib_settings.sequence_counts_exist():
         lib_settings.write_to_log("counting BAM reads")
         transcripts = {}
+        if experiment_settings.get_property('transcriptome_mapping_only'):
+            transcriptome_sequence = experiment.transcriptome_sequence
+            samfile = pysam.AlignmentFile(lib_settings.get_genome_mapped_reads(), "rb")
+        else:
+            samfile = pysam.AlignmentFile(lib_settings.get_transcript_mapped_reads(), "rb")
+
         genome = experiment.genome
         GTF_annotations = experiment.GTF_annotations
-        samfile = pysam.AlignmentFile(lib_settings.get_transcript_mapped_reads(), "rb")
-        for tx_id in  GTF_annotations.pick_all_longest_CDS_transcripts():
+        lib_settings.get_genome_mapped_reads()
+        for tx_id in GTF_annotations.transcript_to_entries.keys():
             chr = GTF_annotations.tx_to_chr[tx_id]
             if chr in genome.genome_sequence:
                 transcripts[tx_id] = transcript(tx_id, GTF_annotations, genome, samfile,
                                                 reads_reversed=experiment_settings.get_property('reads_reversed'),
                                                 forbid_non_polyA_soft_clip=lib_settings.get_property('forbid_non_polya_soft_clip'),
-                                                atail_purity_cutoff=lib_settings.get_property('atail_purity_cutoff')
-                                                )
+                                                atail_purity_cutoff=lib_settings.get_property('atail_purity_cutoff'),
+                                                transcript_mapping_only=experiment_settings.get_property('transcriptome_mapping_only'))
         samfile.close()
         ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
     lib_settings.write_to_log('done counting reads or loading counts')
-
 
 class ribo_lib:
     def __init__(self, experiment_settings, lib_settings):
@@ -150,7 +155,7 @@ class transcript:
 
     """
     def __init__(self, tx_id, GTF_annotations, genome, sam_file, reads_reversed = False, forbid_non_polyA_soft_clip = False,
-                 atail_purity_cutoff=1.0):
+                 atail_purity_cutoff=1.0, transcript_mapping_only=False):
         #self.GTF_annotations = GTF_annotations
         self.tx_length = GTF_annotations.spliced_length(tx_id, exon_type='exon')
         self.exon_starts, self.exon_ends = GTF_annotations.exon_boundaries(tx_id)
@@ -181,7 +186,10 @@ class transcript:
         self.length_dist = defaultdict(int)
         #self.assign_read_ends_from_sam(sam_file, reads_reversed = reads_reversed)
 
-        all_mapping_reads = sam_file.fetch(reference = self.tx_id)
+        if transcript_mapping_only:
+            all_mapping_reads = sam_file.fetch(reference='%s_%s' % (self.tx_id, self.common_name))
+        else:
+            all_mapping_reads = sam_file.fetch(reference = self.tx_id)
         for read in [r for r in all_mapping_reads if (not r.is_secondary) and (reads_reversed == r.is_reverse)]:
             multiplicity = int(read.get_tag('NH:i'))
             assert multiplicity > 0

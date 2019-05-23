@@ -33,16 +33,23 @@ class experiment:
         self.settings.write_to_log('Initializing experiment %s' % self.settings.get_property('experiment_name'))
         self.num_libs = len([x for x in settings.iter_lib_settings()])
         self.make_ncRNA_mapping_index()
+        self.settings.write_to_log('loading GTF annotations')
+        self.GTF_annotations = ribo_utils.gtf_data(self.settings.get_annotation_GTF_file(), add_3_for_stop=self.settings.get_property('add_3_for_stop'))
+        self.settings.write_to_log('loading genome sequence')
+        self.genome = ribo_utils.genome_sequence(self.settings.get_genome_sequence_files())
+        if self.settings.get_property('transcriptome_mapping_only'):
+            #only mapping to the transcriptome, not the genome, so need to generate the genome to map to
+            ribo_utils.make_dir(self.settings.get_transcriptome_dir())
+            self.GTF_annotations.write_transcript_sequences_to_FASTA(self.settings.get_transcriptome_FASTA(), self.genome)
+        self.settings.write_to_log('loading transcriptome sequence')
+        self.transcriptome_sequence = ribo_utils.genome_sequence(self.settings.get_transcriptome_FASTA())
         self.make_genome_mapping_index()
         self.deduplicate_reads()
         self.trim_reads()
         self.remove_adaptor()
         self.map_reads_to_ncrna()
         self.map_reads_to_genome()
-        self.settings.write_to_log('loading genome sequence')
-        self.genome = ribo_utils.genome_sequence(self.settings.get_genome_sequence_files())
-        self.settings.write_to_log('loading GTF annotations')
-        self.GTF_annotations = ribo_utils.gtf_data(self.settings.get_annotation_GTF_file(), add_3_for_stop=self.settings.get_property('add_3_for_stop'))
+
         self.initialize_libs()
         self.settings.write_to_log('Finished initializing experiment %s\n' % self.settings.get_property('experiment_name'))
 
@@ -81,10 +88,17 @@ class experiment:
             ribo_utils.make_dir(self.settings.get_property('star_genome_dir'))
         if make_index:
             self.settings.write_to_log('building STAR index')
-            command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --genomeSAsparseD %d 1>>%s 2>>%s' % (
-                self.threads, self.settings.get_property('star_genome_dir'), self.settings.get_genome_sequence_dir(),
-                self.settings.get_property('star_index_sparsity'),
-                self.settings.get_log(), self.settings.get_log())
+            if self.settings.get_property('transcriptome_mapping_only'):
+                command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s --genomeSAsparseD %d 1>>%s 2>>%s' % (
+                    self.threads, self.settings.get_property('star_genome_dir'),
+                    self.settings.get_transcriptome_FASTA(),
+                    self.settings.get_property('star_index_sparsity'),
+                    self.settings.get_log(), self.settings.get_log())
+            else:
+                command_to_run = 'STAR --runThreadN %d --runMode genomeGenerate --genomeDir %s --genomeFastaFiles %s*.fa --genomeSAsparseD %d 1>>%s 2>>%s' % (
+                    self.threads, self.settings.get_property('star_genome_dir'), self.settings.get_genome_sequence_dir(),
+                    self.settings.get_property('star_index_sparsity'),
+                    self.settings.get_log(), self.settings.get_log())
             self.settings.write_to_log(command_to_run)
             subprocess.Popen(command_to_run, shell=True).wait()
         self.settings.write_to_log('STAR index ready')
@@ -264,35 +278,50 @@ class experiment:
 
     def map_one_library_to_genome(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
-        command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
-                         '--outSAMtype BAM SortedByCoordinate --quantTranscriptomeBan Singleend --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
-                         '--alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
-                         '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
-                         ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
-                         (threads, threads, self.settings.get_star_genome_dir(),
-                          lib_settings.get_ncrna_unmapped_reads(),
-                          self.settings.get_property('alignsjdboverhangmin'),
-                          self.settings.get_property('alignintronmax'),
-                          self.settings.get_property('annotation_gtf_file'),
-                          self.settings.get_property('alignsjoverhangmin'),
-                          self.settings.get_property('outfiltermultimapnmax'),
-                          self.settings.get_property('outfiltermismatchnmax'),
-                          lib_settings.get_genome_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
+
+        if self.settings.get_property('transcriptome_mapping_only'):
+            command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
+                             '--outSAMtype BAM SortedByCoordinate --alignEndsType Extend5pOfRead1 ' \
+                             '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                             ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
+                             (threads, threads, self.settings.get_star_genome_dir(),
+                              lib_settings.get_ncrna_unmapped_reads(),
+                              self.settings.get_property('outfiltermultimapnmax'),
+                              self.settings.get_property('outfiltermismatchnmax'),
+                              lib_settings.get_genome_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
+        else:
+            command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
+                             '--outSAMtype BAM SortedByCoordinate --quantTranscriptomeBan Singleend --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
+                             '--alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
+                             '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                             ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
+                             (threads, threads, self.settings.get_star_genome_dir(),
+                              lib_settings.get_ncrna_unmapped_reads(),
+                              self.settings.get_property('alignsjdboverhangmin'),
+                              self.settings.get_property('alignintronmax'),
+                              self.settings.get_property('annotation_gtf_file'),
+                              self.settings.get_property('alignsjoverhangmin'),
+                              self.settings.get_property('outfiltermultimapnmax'),
+                              self.settings.get_property('outfiltermismatchnmax'),
+                              lib_settings.get_genome_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
-        #sort transcript-mapped bam file
-        command_to_run = 'samtools sort -@ %d -m 50G --output-fmt BAM -o %s.temp_sorted.bam %s 1>>%s 2>>%s' % (threads, lib_settings.get_transcript_mapped_reads(),
-                                                                                                       lib_settings.get_transcript_mapped_reads(),
-                                                                          lib_settings.get_log(), lib_settings.get_log())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell=True).wait()
-        command_to_run = 'mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
-                                                                          lib_settings.get_transcript_mapped_reads())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell = True).wait()
-        command_to_run = 'samtools index %s' % (lib_settings.get_transcript_mapped_reads())
-        lib_settings.write_to_log(command_to_run)
-        subprocess.Popen(command_to_run, shell = True).wait()
+
+        if not self.settings.get_property('transcriptome_mapping_only'):
+            # sort transcript-mapped bam file
+            command_to_run = 'samtools sort -@ %d -m 50G --output-fmt BAM -o %s.temp_sorted.bam %s 1>>%s 2>>%s' % (
+            threads, lib_settings.get_transcript_mapped_reads(),
+            lib_settings.get_transcript_mapped_reads(),
+            lib_settings.get_log(), lib_settings.get_log())
+            lib_settings.write_to_log(command_to_run)
+            subprocess.Popen(command_to_run, shell=True).wait()
+            command_to_run = 'mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
+                                                                              lib_settings.get_transcript_mapped_reads())
+            lib_settings.write_to_log(command_to_run)
+            subprocess.Popen(command_to_run, shell = True).wait()
+            command_to_run = 'samtools index %s' % (lib_settings.get_transcript_mapped_reads())
+            lib_settings.write_to_log(command_to_run)
+            subprocess.Popen(command_to_run, shell = True).wait()
         command_to_run = 'samtools index %s' % (lib_settings.get_genome_mapped_reads())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
@@ -346,12 +375,12 @@ class experiment:
         ribo_plotting.plot_fragment_length_distributions(self)
         ribo_plotting.plot_frame_distributions(self)
 
-        ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
-        ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
-        ribo_plotting.plot_first_exon_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
+        #ribo_plotting.plot_stop_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
+        #ribo_plotting.plot_start_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
+        #ribo_plotting.plot_first_exon_positional_read_lengths(self, up=100, down=100, min_cds_reads=128, read_end='3p')
 
-        ribo_plotting.plot_readthrough_box(self)
-        ribo_plotting.plot_readthrough_box(self, log=True)
+        #ribo_plotting.plot_readthrough_box(self)
+        #ribo_plotting.plot_readthrough_box(self, log=True)
 
     def rdir_path(self, *args):
         return os.path.join(self.settings.get_rdir(), *args)

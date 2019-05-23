@@ -50,7 +50,8 @@ class ribo_settings:
                     'alignsjdboverhangmin', 'alignsjoverhangmin', 'alignintronmax', 'five_prime_p_offset']
         float_keys = ['atail_purity_cutoff']
         str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'star_ncrna_dir', 'genome_sequence_dir', 'ncrna_sequence_dir', 'annotation_gtf_file']
-        boolean_keys = ['deduplicate_reads', 'force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop', 'forbid_non_polya_soft_clip']
+        #if transcriptome_only is true, will genreate a transcriptome-only genome to map to
+        boolean_keys = ['transcriptome_mapping_only', 'deduplicate_reads', 'force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop', 'forbid_non_polya_soft_clip']
         list_str_keys = ['fastq_gz_files', 'sample_names']
         #list_float_keys = ['concentrations', 'input_rna']
         extant_files = ['genome_sequence_dir', 'annotation_gtf_file']
@@ -169,6 +170,11 @@ class ribo_settings:
           'mapping_summary.txt')
         return summary_file
 
+    def get_transcriptome_FASTA(self):
+        return os.path.join(self.get_rdir(),'transcriptome', 'transcriptome.fa')
+
+    def get_transcriptome_dir(self):
+        return os.path.join(self.get_rdir(),'transcriptome')
 class ribo_lib_settings:
     def __init__(self, experiment_settings, sample_name, fastq_gz_filehandle):
         self.experiment_settings = experiment_settings
