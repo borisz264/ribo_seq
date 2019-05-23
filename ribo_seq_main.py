@@ -216,8 +216,8 @@ class experiment:
 
     def map_one_library_to_ncrna(self, lib_settings, threads):
         lib_settings.write_to_log('mapping_reads')
-        command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --seedPerWindowNmax 25 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
-                         '--outSAMtype BAM SortedByCoordinate --outFilterMultimapScoreRange 0 --outFilterMismatchNmax 3 --outFilterMismatchNoverLmax 0.1 --outFilterMultimapNmax 10 --outSAMmultNmax 1 --outFileNamePrefix %s ' \
+        command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 8000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s --readFilesCommand gunzip -c ' \
+                         '--outSAMtype BAM SortedByCoordinate --outFilterMismatchNmax 2 --outSAMmultNmax 1 --outFileNamePrefix %s ' \
                          '--outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                          (threads, threads, self.settings.get_star_ncrna_dir(),
                           lib_settings.get_adaptor_trimmed_reads(),
@@ -281,7 +281,7 @@ class experiment:
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
         #sort transcript-mapped bam file
-        command_to_run = 'samtools sort -@ %d -m 50G -f %s %s.temp_sorted.bam 1>>%s 2>>%s' % (threads, lib_settings.get_transcript_mapped_reads(),
+        command_to_run = 'samtools sort -@ %d -m 50G --output-fmt BAM -o %s.temp_sorted.bam %s 1>>%s 2>>%s' % (threads, lib_settings.get_transcript_mapped_reads(),
                                                                                                        lib_settings.get_transcript_mapped_reads(),
                                                                           lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
