@@ -1,5 +1,6 @@
 import ribo_utils
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 plt.rcParams['pdf.fonttype'] = 42 #leaves most text as actual text in PDFs, not outlines
 import os
@@ -9,31 +10,52 @@ from matplotlib.ticker import AutoMinorLocator
 from matplotlib import rc
 rc('font',**{'family':'sans-serif','sans-serif':['Bitstream Vera Sans']})
 
-def plot_fragment_length_distributions(experiment, min_x=15):
-    fig = plt.figure(figsize=(16, 16))
-    num_libs = len(experiment.libs)
-    num_plots_wide = math.sqrt(ribo_utils.next_square_number(num_libs))
-    num_plots_high = math.sqrt(ribo_utils.next_square_number(num_libs))
-    colormap = uniform_colormaps.viridis
-    plot_index = 0
+def plot_fragment_length_distributions(experiment):
+    dfs = []
     for lib in experiment.libs:
-        plot = fig.add_subplot(num_plots_high, num_plots_wide, plot_index+1)
-        sample_name = lib.lib_settings.sample_name
-        fragment_length_counts = lib.get_all_CDS_fragment_length_counts()
-        bins = range(0, max(fragment_length_counts.keys()))
-        fragment_length_fractions = np.array([fragment_length_counts[length] for length in bins]) / float(
-            lib.total_mapped_fragments)
-        # note that all but the last bin exclude the right (larger) edge of the bin. So I add an extra bin.
-        plot.plot(bins, fragment_length_fractions,
-                  color=colormap((plot_index - 1) / float(len(experiment.libs))), lw=1, label=sample_name)
-        plot_index += 1
-        plot.set_xlabel("fragment length", fontsize=8)
-        plot.set_ylabel("fraction of fragments", fontsize=8)
-        plot.set_title(sample_name,  fontsize=8)
-        plot.set_xlim(min_x, max(bins))
-    #lg = plt.legend(loc=2, prop={'size': 12}, labelspacing=0.2)
-    #lg.draw_frame(False)
-    plt.tight_layout()
+        frag_dict = lib.get_all_CDS_fragment_length_counts()
+        frag_lengths = sorted(frag_dict.keys())
+        frag_length_counts = [frag_dict[length] for length in frag_lengths]
+        d = {'fragment length': frag_lengths, '# reads': frag_length_counts,
+             '% reads': 100. * np.array(frag_length_counts) / sum(frag_length_counts),
+             'sample': [lib.lib_settings.sample_name] * len(frag_length_counts)}
+        temp_df = pd.DataFrame(data=d)
+        dfs.append(temp_df)
+        print lib.lib_settings.sample_name, 'reads: ', sum(frag_length_counts)
+    frag_length_df = pd.concat(dfs)
+    out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'fragment_length_distributions.tsv')
+    frag_length_df.to_csv(out_name, sep='\t')
+    out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'fragment_length_percent_pivot.tsv')
+    frag_length_df.pivot(columns='sample', values ='% reads', index='fragment length').to_csv(out_name, sep='\t')
+
+    fig = plt.figure(figsize=(8, 5))
+    plots = []
+    plot = fig.add_subplot(111)
+    color_index = 0
+    group_df = frag_length_df.groupby(['sample'])
+    for lib in experiment.libs:
+        sample = lib.lib_settings.sample_name
+        df = group_df.get_group(sample)
+        df.plot(x='fragment length', y='% reads', ax=plot, color=ribo_utils.rainbow[color_index], lw=2, sharex=True,
+                sharey=True, label=sample)
+        color_index += 1
+    plots.append(plot)
+
+    for plot in plots:
+        #major_xticks = range(12, 60, 3)
+        #plot.set_xticks(major_xticks, minor=False)
+        # plot.set_xticklabels(major_tick_labels)
+        plot.set_ylabel('% CDS-mapping reads', fontsize=20)
+        plot.set_xlabel('fragment length', fontsize=20)
+        # Hide the right and top spines
+        plot.spines['right'].set_visible(False)
+        plot.spines['top'].set_visible(False)
+        #plot.set_xlim(12, 57)
+        #plot.set_ylim(0, 65)
+        # try:
+        #    plot.legend_.remove()
+        # except:
+        #    pass
     out_name = os.path.join(experiment.settings.get_rdir(), 'plots', 'fragment_length_distributions.pdf')
     plt.savefig(out_name, transparent='True', format='pdf')
     plt.clf()
