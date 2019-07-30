@@ -36,7 +36,7 @@ def plot_fragment_length_distributions(experiment):
     for lib in experiment.libs:
         sample = lib.lib_settings.sample_name
         df = group_df.get_group(sample)
-        df.plot(x='fragment length', y='% reads', ax=plot, color=ribo_utils.rainbow[color_index], lw=2, sharex=True,
+        df.plot(x='fragment length', y='% reads', ax=plot, color=ribo_utils.rainbow[color_index%len(ribo_utils.rainbow)], linestyle=ribo_utils.line_styles[color_index/len(ribo_utils.rainbow)], lw=2, sharex=True,
                 sharey=True, label=sample)
         color_index += 1
     plots.append(plot)
