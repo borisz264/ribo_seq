@@ -41,8 +41,8 @@ class experiment:
             #only mapping to the transcriptome, not the genome, so need to generate the genome to map to
             ribo_utils.make_dir(self.settings.get_transcriptome_dir())
             self.GTF_annotations.write_transcript_sequences_to_FASTA(self.settings.get_transcriptome_FASTA(), self.genome)
-        self.settings.write_to_log('loading transcriptome sequence')
-        self.transcriptome_sequence = ribo_utils.genome_sequence(self.settings.get_transcriptome_FASTA())
+            self.settings.write_to_log('loading transcriptome sequence')
+            self.transcriptome_sequence = ribo_utils.genome_sequence(self.settings.get_transcriptome_FASTA())
         self.make_genome_mapping_index()
         self.deduplicate_reads()
         self.trim_reads()
