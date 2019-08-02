@@ -28,7 +28,9 @@ def assign_tx_reads(experiment, experiment_settings, lib_settings):
                                                 reads_reversed=experiment_settings.get_property('reads_reversed'),
                                                 forbid_non_polyA_soft_clip=lib_settings.get_property('forbid_non_polya_soft_clip'),
                                                 atail_purity_cutoff=lib_settings.get_property('atail_purity_cutoff'),
-                                                transcript_mapping_only=experiment_settings.get_property('transcriptome_mapping_only'))
+                                                transcript_mapping_only=experiment_settings.get_property('transcriptome_mapping_only'),
+                                                unique_mapping_only=experiment_settings.get_property(
+                                                    'unique_mapping_only'))
         samfile.close()
         ribo_utils.makePickle(transcripts, lib_settings.get_transcript_counts())
     lib_settings.write_to_log('done counting reads or loading counts')
@@ -155,7 +157,7 @@ class transcript:
 
     """
     def __init__(self, tx_id, GTF_annotations, genome, sam_file, reads_reversed = False, forbid_non_polyA_soft_clip = False,
-                 atail_purity_cutoff=1.0, transcript_mapping_only=False):
+                 atail_purity_cutoff=1.0, transcript_mapping_only=False, unique_mapping_only=False):
         #self.GTF_annotations = GTF_annotations
         self.tx_length = GTF_annotations.spliced_length(tx_id, exon_type='exon')
         self.exon_starts, self.exon_ends = GTF_annotations.exon_boundaries(tx_id)
@@ -193,7 +195,7 @@ class transcript:
         for read in [r for r in all_mapping_reads if (not r.is_secondary) and (reads_reversed == r.is_reverse)]:
             multiplicity = int(read.get_tag('NH:i'))
             assert multiplicity > 0
-            if multiplicity == 1:
+            if not (unique_mapping_only and multiplicity > 1):
                 if reads_reversed:
                     fragment_start = read.reference_end+1
                     fragment_end = read.reference_start

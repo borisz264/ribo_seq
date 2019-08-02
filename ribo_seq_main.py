@@ -215,7 +215,7 @@ class experiment:
         """
         if not self.settings.get_property('force_remapping'):
             for lib_settings in self.settings.iter_lib_settings():
-                if not lib_settings.genome_mapped_reads_exist():
+                if not lib_settings.ncrna_mapped_reads_exist():
                     break
             else:
                 self.settings.write_to_log('using existing noncoding RNA mapped reads')
@@ -238,21 +238,9 @@ class experiment:
                           lib_settings.get_ncrna_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         lib_settings.write_to_log(command_to_run)
         subprocess.Popen(command_to_run, shell=True).wait()
-        #sort transcript-mapped bam file
-        #command_to_run = 'samtools sort %s -o %s.temp_sorted.bam 1>>%s 2>>%s' % (lib_settings.get_transcript_mapped_reads(), lib_settings.get_transcript_mapped_reads(),
-        #                                                                  lib_settings.get_log(), lib_settings.get_log())
-        #lib_settings.write_to_log(command_to_run)
-        #subprocess.Popen(command_to_run, shell=True).wait()
-        #command_to_run = 'mv %s.temp_sorted.bam %s' % (lib_settings.get_transcript_mapped_reads(),
-        #                                                                  lib_settings.get_transcript_mapped_reads())
-        #lib_settings.write_to_log(command_to_run)
-        #subprocess.Popen(command_to_run, shell = True).wait()
-        #command_to_run = 'samtools index %s' % (lib_settings.get_transcript_mapped_reads())
-        #lib_settings.write_to_log(command_to_run)
-        #subprocess.Popen(command_to_run, shell = True).wait()
-        #command_to_run = 'samtools index %s' % (lib_settings.get_ncrna_mapped_reads())
-        #lib_settings.write_to_log(command_to_run)
-        #subprocess.Popen(command_to_run, shell=True).wait()
+        command_to_run = 'samtools index %s' % (lib_settings.get_ncrna_mapped_reads())
+        lib_settings.write_to_log(command_to_run)
+        subprocess.Popen(command_to_run, shell=True).wait()
         lib_settings.write_to_log('mapping_reads done')
 
     def map_reads_to_genome(self):
