@@ -7,8 +7,6 @@ import os
 import uniform_colormaps
 import math
 from matplotlib.ticker import AutoMinorLocator
-from matplotlib import rc
-rc('font',**{'family':'sans-serif','sans-serif':['Bitstream Vera Sans']})
 
 def plot_fragment_length_distributions(experiment):
     dfs = []
