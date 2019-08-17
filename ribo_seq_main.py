@@ -270,7 +270,7 @@ class experiment:
         if self.settings.get_property('transcriptome_mapping_only'):
             command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
                              '--outSAMtype BAM SortedByCoordinate --alignEndsType Extend5pOfRead1 ' \
-                             '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                             '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                              ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                              (threads, threads, self.settings.get_star_genome_dir(),
                               lib_settings.get_ncrna_unmapped_reads(),
@@ -281,7 +281,7 @@ class experiment:
             command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
                              '--outSAMtype BAM SortedByCoordinate --quantTranscriptomeBan Singleend --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
                              '--alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
-                             '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
+                             '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                              ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                              (threads, threads, self.settings.get_star_genome_dir(),
                               lib_settings.get_ncrna_unmapped_reads(),
