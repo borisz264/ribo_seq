@@ -25,7 +25,7 @@ class ribo_qc:
         self.get_rdir = experiment_settings.get_rdir
         ribo_utils.make_dir(self.experiment.rdir_path('QC'))
         self.genome = self.experiment.genome
-        self.GTF_annotations = self.experiment.GTF_annotations
+        self.full_QC_GTF_annotations = ribo_utils.gtf_data(self.experiment_settings.get_QC_annotation_GTF_file(), add_3_for_stop=self.experiment_settings.get_property('add_3_for_stop'))
         self.lib_QCs = [self.initialize_qc_lib(lib_settings) for lib_settings in self.experiment_settings.iter_lib_settings()]
         #TODO: libraries need not be initiated if the proper intermediate TSV files exist
 
@@ -79,7 +79,7 @@ class ribo_qc:
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'rRNA_fragment_sizes_multi_plot.pdf')
         g.savefig(outname, transparent=True)
 
-    def plot_read_annotations_summary(self, mapped_only=False, representation_cutoff = 2):
+    def plot_read_annotations_summary(self, mapped_only=False, representation_cutoff = 1.0):
         dfs = []
         for qc_lib in self.lib_QCs:
             dict_list = [] # a list of tuples that I wil later cast to a dict
@@ -96,7 +96,7 @@ class ribo_qc:
             dfs.append(temp_df)
         read_summary = pd.concat(dfs)
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'read_annotation_summary.tsv')
-        read_summary.to_csv(outname, sep='\t', index_label=False)
+        read_summary.to_csv(outname, sep='\t')
 
         #now lets assemble the info we'll need for making the stacked bar graph.
         #first consolidate the tRNA data
@@ -115,19 +115,19 @@ class ribo_qc:
             else:
                 consolidated_summary[header] = read_summary[header]
 
-        consolidated_summary['tRNA'] = read_summary[tRNA_headers].sum(axis=1)
-        consolidated_summary['rRNA'] = read_summary[rRNA_headers].sum(axis=1)
-        consolidated_summary['snRNA'] = read_summary[snRNA_headers].sum(axis=1)
+        consolidated_summary['tRNA_mapping'] = read_summary[tRNA_headers].sum(axis=1)
+        consolidated_summary['rRNA_mapping'] = read_summary[rRNA_headers].sum(axis=1)
+        consolidated_summary['snRNA_mapping'] = read_summary[snRNA_headers].sum(axis=1)
 
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'consolidated_read_annotation_summary.tsv')
-        consolidated_summary.to_csv(outname, sep='\t', index_label=False)
+        consolidated_summary.to_csv(outname, sep='\t')
         consolidated_percent_summary = consolidated_summary[
             [header for header in sorted(list(consolidated_summary.columns.values)) if header != 'sample']].div(
             consolidated_summary['reads processed'], axis='index')
         consolidated_percent_summary = consolidated_percent_summary.apply(lambda x: x * 100.)
         consolidated_percent_summary['sample'] = consolidated_summary['sample']
         outname = os.path.join(self.experiment_settings.get_rdir(), 'QC', 'consolidated_percent_read_annotation_summary.tsv')
-        consolidated_percent_summary.to_csv(outname, sep='\t', index_label=False)
+        consolidated_percent_summary.to_csv(outname, sep='\t')
         top_summary = pd.DataFrame()
         totals = consolidated_percent_summary.sum()  # sum each column
         multi_totals = {}
@@ -136,15 +136,15 @@ class ribo_qc:
             sp = header.split(' mapping')
             if sp[0] == 'multiple':
                 multi_totals[header] = totals[header]
-            elif sp[0] == 'unique':
+            else:
                 unique_totals[header] = totals[header]
         #sort into annotations that are represented above a certain percentage
-        top_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if consolidated_percent_summary[anno][0]>=representation_cutoff]
-        other_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if consolidated_percent_summary[anno][0]<representation_cutoff]
-        top_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if consolidated_percent_summary[anno][0]>=representation_cutoff]
-        other_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if consolidated_percent_summary[anno][0]<representation_cutoff]
+        top_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if max(consolidated_percent_summary[anno])>=representation_cutoff]
+        other_multi = [anno for anno in sorted(multi_totals.keys(), key=lambda x: multi_totals[x], reverse=True) if max(consolidated_percent_summary[anno])<representation_cutoff]
+        top_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if max(consolidated_percent_summary[anno])>=representation_cutoff]
+        other_unique = [anno for anno in sorted(unique_totals.keys(), key=lambda x: unique_totals[x], reverse=True) if max(consolidated_percent_summary[anno])<representation_cutoff]
         for header in list(consolidated_percent_summary.columns.values):
-            if 'mapping' in header:
+            if 'mapping' in header or '<' in header:
                 if header in top_multi or header in top_unique:
                     top_summary[header] = consolidated_percent_summary[header]
             else:
@@ -362,20 +362,30 @@ class single_lib_qc():
                         strand = '+'
                     else:  # alignment on - strand
                         strand = '-'
-                    annotation_entry = self.parent_qc.GTF_annotations.find_smallest_annotation_at_position(chromosome, strand, alignment.reference_start, alignment.reference_end)
-                    if annotation_entry is None or annotation_entry.get_value('type') is None:
+                    annotation_entry = self.parent_qc.full_QC_GTF_annotations.find_smallest_annotation_at_position(chromosome, strand, alignment.reference_start, alignment.reference_end)
+                    if annotation_entry is None:
                         self.annotation_mapping_counts[uniqueness]['not annotated']+=1
+                    elif annotation_entry.get_value('type') is None:
+                        self.annotation_mapping_counts[uniqueness]['not annotated'] += 1
                     elif annotation_entry.get_value('type') in ['transcript', 'exon']:
                         if annotation_entry.get_value('transcript_type') is None:
                             self.annotation_mapping_counts[uniqueness][annotation_entry.get_value('type')]+=1
                         else:
+                            #if annotation_entry.get_value('transcript_type') == 'protein_coding':
+                            #    self.lib_settings.write_to_log('protein_coding hit: %s %s %d %d %s %s' % (chromosome, strand, alignment.reference_start, alignment.reference_end, alignment.cigarstring, alignment.query_sequence))
+                            #    self.lib_settings.write_to_log(annotation_entry)
                             self.annotation_mapping_counts[uniqueness][annotation_entry.get_value('transcript_type')]+=1
                     elif annotation_entry.get_value('type') == 'UTR':
                         # need to differentiate 5' from 3' UTR
-                        type = self.parent_qc.GTF_annotations.utr_type(annotation_entry)
+                        type = self.parent_qc.full_QC_GTF_annotations.utr_type(annotation_entry)
                         assert type is not None
                         self.annotation_mapping_counts[uniqueness][type] += 1
                     else:
                         self.annotation_mapping_counts[uniqueness][annotation_entry.get_value('type')]+=1
+                        #if annotation_entry.get_value('ype') == 'protein_coding':
+                            #self.lib_settings.write_to_log('protein_coding hit: %s %s %d %d %s %s' % (
+                            #chromosome, strand, alignment.reference_start, alignment.reference_end, alignment.cigarstring,
+                            #alignment.query_sequence))
+
         self.lib_settings.write_to_log('total_aligned: %d' % self.total_primary_alignments)
         self.lib_settings.write_to_log('finished making mapping annotation_summary for all mapping reads')
