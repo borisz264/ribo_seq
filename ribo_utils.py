@@ -601,7 +601,7 @@ class gtf_data():
         """
 
         if self.chr_to_entry is None:
-            self.bin_entries_on_chromosome()
+            self.bin_entries_on_chromosome(bin_size=bin_size)
         overlaps = []
         for position_bin in range(int(start_position) / bin_size * bin_size, (int(end_position) / bin_size * bin_size) + bin_size, bin_size):
             for entry in self.chr_to_entry[chromosome][strand][position_bin]:
@@ -611,9 +611,9 @@ class gtf_data():
                 elif start_position <= int(entry.get_value('end')) and end_position >= int(entry.get_value('start')):
                     overlaps.append(entry)
                 elif int(entry.get_value('start')) > end_position:
-                    overlaps.sort(key=lambda x: (x.length(), type_sorting_order.index(x.get_value('type'))))
+                    overlaps.sort(key=lambda x: (type_sorting_order.index(x.get_value('type')), x.length()))
                     return overlaps
-        overlaps.sort(key=lambda x: (x.length(), type_sorting_order.index(x.get_value('type'))))
+        overlaps.sort(key=lambda x: (type_sorting_order.index(x.get_value('type')), x.length()))
         return overlaps
 
     def find_smallest_annotation_at_position(self, chromosome, strand, start_position, end_position, type_restrictions=None,
@@ -625,7 +625,7 @@ class gtf_data():
         :return: 
         '''
         #if not (start_position in self.shortest_annotations[strand][chr] and  end_position in self.shortest_annotations[strand][chr][start_position]):
-        entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order, bin_size=10)
+        entries = self.find_annotations_overlapping_range(chromosome, strand, start_position, end_position, type_restrictions=type_restrictions, type_sorting_order=type_sorting_order, bin_size=1000)
         if len(entries)>0:
             #self.shortest_annotations[strand][chr][start_position][end_position] = entries[0]
             return entries[0]
