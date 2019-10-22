@@ -38,8 +38,13 @@ def make_cds_rpkm_table(experiment):
     f.write('tx_id\tgene_name\t%s\n' % '\t'.join(sample_names))
     for tx_name in all_genes:
         gene_name = lib.get_transcript(tx_name).common_name
-        values = [str(lib.get_cds_rpkm(tx_name, 30, 0, read_end='3p', read_lengths='all')) for lib in experiment.libs]
+        try:
+            values = [str(lib.get_cds_rpkm(tx_name, 30, 0, read_end='3p', read_lengths='all')) for lib in experiment.libs]
+        except:
+            print('CDS too short to compute RPKM with given offsets:', tx_name, tx_name, lib.get_transcript(tx_name).cds_length)
         f.write('%s\t%s\t%s\n' % (tx_name, gene_name, '\t'.join(values)))
+        #except:
+        #    pass
     f.close()
 
 def make_cds_counts_table(experiment):
