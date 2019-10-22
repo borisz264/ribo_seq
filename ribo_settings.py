@@ -49,7 +49,7 @@ class ribo_settings:
                      'sequence_quality_cutoff', 'trim_5p', 'star_index_sparsity', 'outfiltermultimapnmax', 'outfiltermismatchnmax',
                     'alignsjdboverhangmin', 'alignsjoverhangmin', 'alignintronmax', 'five_prime_p_offset']
         float_keys = ['atail_purity_cutoff']
-        str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'star_ncrna_dir', 'genome_sequence_dir', 'ncrna_sequence_dir', 'annotation_gtf_file']
+        str_keys = ['adaptor_3p_sequence', 'star_genome_dir', 'star_ncrna_dir', 'genome_sequence_dir', 'ncrna_sequence_dir', 'annotation_gtf_file', 'qc_annotation_gtf_file', 'alignendstype']
         #if transcriptome_only is true, will genreate a transcriptome-only genome to map to
         boolean_keys = ['transcriptome_mapping_only', 'deduplicate_reads', 'force_remapping', 'force_recount', 'rebuild_star_index', 'force_retrim',  'make_interactive_plots', 'reads_reversed', 'add_3_for_stop', 'forbid_non_polya_soft_clip', 'unique_mapping_only']
         list_str_keys = ['fastq_gz_files', 'sample_names']
@@ -147,6 +147,10 @@ class ribo_settings:
 
     def get_annotation_GTF_file(self):
         anno_file = self.get_property('annotation_gtf_file')
+        return anno_file
+
+    def get_QC_annotation_GTF_file(self):
+        anno_file = self.get_property('qc_annotation_gtf_file')
         return anno_file
 
     def get_trimming_count_summary(self):
