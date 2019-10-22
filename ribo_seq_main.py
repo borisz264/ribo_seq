@@ -192,7 +192,7 @@ class experiment:
         -o is the output prefix
         --threads specifies number of threads to use
         """
-        command_to_run = 'skewer -x %s -Q %d -l %d -L %d -o %s --quiet --threads %s %s 1>>%s 2>>%s' % (
+        command_to_run = 'skewer -x %s -Q %d -l %d -L %d -o %s --quiet --mode any --threads %s %s 1>>%s 2>>%s' % (
             self.settings.get_property('adaptor_3p_sequence'),
             self.settings.get_property('sequence_quality_cutoff'),
             self.settings.get_property('min_post_trimming_length'),
@@ -269,22 +269,24 @@ class experiment:
 
         if self.settings.get_property('transcriptome_mapping_only'):
             command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
-                             '--outSAMtype BAM SortedByCoordinate --alignEndsType Extend5pOfRead1 ' \
+                             '--outSAMtype BAM SortedByCoordinate --alignEndsType %s ' \
                              '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                              ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                              (threads, threads, self.settings.get_star_genome_dir(),
                               lib_settings.get_ncrna_unmapped_reads(),
+                              self.settings.get_property('alignendstype'),
                               self.settings.get_property('outfiltermultimapnmax'),
                               self.settings.get_property('outfiltermismatchnmax'),
                               lib_settings.get_genome_mapped_reads_prefix(), lib_settings.get_log(), lib_settings.get_log())
         else:
             command_to_run = 'STAR --runThreadN %d --limitBAMsortRAM 80000000000 --outBAMsortingThreadN %d --genomeDir %s --readFilesIn %s ' \
-                             '--outSAMtype BAM SortedByCoordinate --quantTranscriptomeBan Singleend --quantMode TranscriptomeSAM --alignEndsType Extend5pOfRead1 ' \
+                             '--outSAMtype BAM SortedByCoordinate --quantTranscriptomeBan Singleend --quantMode TranscriptomeSAM --alignEndsType %s ' \
                              '--alignSJDBoverhangMin %d --alignIntronMax %d --sjdbGTFfile %s --alignSJoverhangMin %d ' \
                              '--outFilterType BySJout --outFilterMultimapNmax %d, --outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0, --outFilterMismatchNmax %d --outWigType wiggle read1_5p --outFileNamePrefix %s' \
                              ' --outReadsUnmapped Fastx 1>>%s 2>>%s' %\
                              (threads, threads, self.settings.get_star_genome_dir(),
                               lib_settings.get_ncrna_unmapped_reads(),
+                              self.settings.get_property('alignendstype'),
                               self.settings.get_property('alignsjdboverhangmin'),
                               self.settings.get_property('alignintronmax'),
                               self.settings.get_property('annotation_gtf_file'),
@@ -297,7 +299,7 @@ class experiment:
 
         if not self.settings.get_property('transcriptome_mapping_only'):
             # sort transcript-mapped bam file
-            command_to_run = 'samtools sort -@ %d -m 50G --output-fmt BAM -o %s.temp_sorted.bam %s 1>>%s 2>>%s' % (
+            command_to_run = 'samtools sort -@ %d --output-fmt BAM -o %s.temp_sorted.bam %s 1>>%s 2>>%s' % (
             threads, lib_settings.get_transcript_mapped_reads(),
             lib_settings.get_transcript_mapped_reads(),
             lib_settings.get_log(), lib_settings.get_log())
