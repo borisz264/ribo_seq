@@ -171,9 +171,11 @@ class transcript:
             self.is_coding = False
         else:
             self.is_coding = True
-            self.cds_length = self.cds_end-self.cds_start
-            self.trailer_length = self.tx_length-self.cds_end
-            self.leader_length =self.cds_start
+            self.cds_length = (self.cds_end-self.cds_start)+1
+            #if not self.cds_length%3==0:
+            #    print('cds not multiple of 3:', self.gene_id)
+            self.trailer_length = (self.tx_length-self.cds_end)-1
+            self.leader_length = self.cds_start
             assert self.trailer_length + self.cds_length + self.leader_length == self.tx_length
         self.full_sequence = GTF_annotations.transcript_sequence(genome, self.tx_id, exon_type='exon')
         self.fragment_5p_ends_at_position = defaultdict(int) #will map position to # of reads there
@@ -291,6 +293,22 @@ class transcript:
                 sys.exit()
             for position in super_dict:
                 read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths if read_length in super_dict[position]])
+        return read_dict
+
+    def get_fractional_read_coverage(self, read_lengths = 'all'):
+        '''
+        :param read_lengths: the string 'all', or a list of read length integers
+        #note that read end doesn't matter here
+        :return: read coverage at each position, in which each read contributes 1/read_length to each position it overlaps
+        '''
+        super_dict = self.fragment_5p_lengths_at_position
+        read_dict = defaultdict(float)
+        for position in super_dict:
+            #print super_dict, super_dict[position]
+            for read_length in super_dict[position]:
+                if read_lengths == 'all' or read_length in read_lengths:
+                    for i in range(read_length):
+                        read_dict[position+i] = read_dict[position+i] + 1./read_length
         return read_dict
 
     def get_polyA_read_end_positions(self, read_lengths = 'all', read_end = '5p', min_polyA_length=1):
