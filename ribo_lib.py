@@ -295,6 +295,18 @@ class transcript:
                 read_dict[position] = sum([super_dict[position][read_length] for read_length in read_lengths if read_length in super_dict[position]])
         return read_dict
 
+    def get_a_site_positions(self, a_site_offsets):
+        '''
+        :param a_site_offsets: example: {28:-15, 29:-15, 30:-16} locations of A site relative to read 5p end (zero indexed)
+        This offset be the location of the max start codon peak when these read lengths are aligned at the A of the start codon as zero
+        :return:
+        '''
+        read_dict = {}
+        super_dict = self.fragment_5p_lengths_at_position
+        for position in super_dict:
+            read_dict[position] = sum([super_dict[position+a_site_offsets[read_length]][read_length] for read_length in a_site_offsets if read_length in super_dict[position]])
+        return read_dict
+
     def get_fractional_read_coverage(self, read_lengths = 'all'):
         '''
         :param read_lengths: the string 'all', or a list of read length integers
