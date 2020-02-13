@@ -437,11 +437,11 @@ def main():
     ribo_experiment = experiment(settings, args.threads)
     print 'experiment ready'
 
-    if args.perform_qc or args.all_tasks:
-        print 'performing QC'
-        settings.write_to_log('performing QC')
-        ribo_experiment.perform_qc()
-        settings.write_to_log('done performing QC')
+    if args.make_plots or args.all_tasks:
+        print 'plots'
+        settings.write_to_log('making plots')
+        ribo_experiment.make_plots()
+        settings.write_to_log('done making plots')
 
     if args.make_tables or args.all_tasks:
         print 'tables'
@@ -449,11 +449,11 @@ def main():
         ribo_experiment.make_tables()
         settings.write_to_log('done making tables')
 
-    if args.make_plots or args.all_tasks:
-        print 'plots'
-        settings.write_to_log('making plots')
-        ribo_experiment.make_plots()
-        settings.write_to_log('done making plots')
+    if args.perform_qc or args.all_tasks:
+        print 'performing QC'
+        settings.write_to_log('performing QC')
+        ribo_experiment.perform_qc()
+        settings.write_to_log('done performing QC')
 
 if __name__ == "__main__":
     # execute only if run as a script
