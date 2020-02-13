@@ -41,15 +41,16 @@ class ribo_qc:
                           'short reads filtered out after trimming by size control',
                           'empty reads filtered out after trimming by size control',
                           'reads available', 'trimmed reads available']:
-            out_list = [stat_name] + [str(single_lib_qc.adaptor_stats[stat_name]) for single_lib_qc in self.lib_QCs]
-            out_percent_list = [stat_name] +\
-                               [str(100.*single_lib_qc.adaptor_stats[
-                                        stat_name]/float(single_lib_qc.adaptor_stats['reads processed']))
-                                for single_lib_qc in self.lib_QCs]
-            out_line = '%s\n' % ('\t'.join(out_list))
-            out_file.write(out_line)
-            out_percent_line = '%s\n' % ('\t'.join(out_percent_list))
-            out_percent_file.write(out_percent_line)
+            if stat_name in single_lib_qc.adaptor_stats.keys():
+                out_list = [stat_name] + [str(single_lib_qc.adaptor_stats[stat_name]) for single_lib_qc in self.lib_QCs]
+                out_percent_list = [stat_name] +\
+                                   [str(100.*single_lib_qc.adaptor_stats[
+                                            stat_name]/float(single_lib_qc.adaptor_stats['reads processed']))
+                                    for single_lib_qc in self.lib_QCs]
+                out_line = '%s\n' % ('\t'.join(out_list))
+                out_file.write(out_line)
+                out_percent_line = '%s\n' % ('\t'.join(out_percent_list))
+                out_percent_file.write(out_percent_line)
 
         out_file.close()
         out_percent_file.close()
@@ -164,7 +165,8 @@ class ribo_qc:
 
         if mapped_only:
             del top_summary['unmapped']
-            del top_summary['<%d nt' % (self.get_property('min_post_trimming_length'))]
+            if '<%d nt' % (self.get_property('min_post_trimming_length')) in top_summary:
+                del top_summary['<%d nt' % (self.get_property('min_post_trimming_length'))]
             top_summary = top_summary[
                 [header for header in sorted(list(top_summary.columns.values)) if header != 'sample']].div(
                 top_summary.sum(axis=1), axis='index')
@@ -243,10 +245,10 @@ class single_lib_qc():
         self.ncrna_samfile = pysam.AlignmentFile(self.lib_settings.get_ncrna_mapped_reads(), "rb")
         self.count_ncrna_mapping_reads()
         self.ncrna_samfile.close()
-        genome_samfile = pysam.AlignmentFile(self.lib_settings.get_genome_mapped_reads(), "rb")
-        #self.get_mapping_multiplicity_stats()
-        self.get_mapping_annotation_summary(genome_samfile)
-        genome_samfile.close()
+        self.genome_samfile = pysam.AlignmentFile(self.lib_settings.get_genome_mapped_reads(), "rb")
+        self.get_mapping_multiplicity_stats()
+        self.get_mapping_annotation_summary(self.genome_samfile)
+        self.genome_samfile.close()
 
     def count_ncrna_mapping_reads(self):
         self.ncrna_reference_counts = defaultdict(int)
@@ -270,7 +272,7 @@ class single_lib_qc():
         out_file = open(self.lib_settings.get_ncrna_most_common_reads(), 'w')
 
         for sequence in sorted(self.ncrna_sequence_multiplicities.keys(), key=lambda x:self.ncrna_sequence_multiplicities[x]['count'], reverse=True)[:100]:
-            out_file.write('%s\t%s\t%d\n' % (self.ncrna_sequence_multiplicities[sequence]['reference'], sequence, self.ncrna_sequence_multiplicities[sequence]['count']))
+            out_file.write('>%s_%d\n%s\n' % (self.ncrna_sequence_multiplicities[sequence]['reference'], self.ncrna_sequence_multiplicities[sequence]['count'], sequence, ))
         out_file.close()
         self.lib_settings.write_to_log('done counting rrna-mapped reads')
 
@@ -287,17 +289,19 @@ class single_lib_qc():
         for line in trimming_log:
             if "reads processed; of these:" in line:
                 self.adaptor_stats['reads processed'] = int(line.strip().split()[0])
-                line = trimming_log.next()
+            elif "reads filtered out by quality control" in line:
                 self.adaptor_stats['reads filtered out by quality control'] = int(line.strip().split()[0])
-                line = trimming_log.next()
+            elif "short reads filtered out after trimming by size control" in line:
                 self.adaptor_stats['short reads filtered out after trimming by size control'] = int(line.strip().split()[0])
-                line = trimming_log.next()
+            elif "empty reads filtered out after trimming by size control" in line:
                 self.adaptor_stats['empty reads filtered out after trimming by size control'] = int(line.strip().split()[0])
-                line = trimming_log.next()
+            elif "reads available; of these:" in line:
                 self.adaptor_stats['reads available'] = int(line.strip().split()[0])
-                line = trimming_log.next()
+            elif "untrimmed reads available after processing" in line:
+                self.adaptor_stats['untrimmed reads available'] = int(line.strip().split()[0])
+            elif " trimmed reads available after processing" in line:
                 self.adaptor_stats['trimmed reads available'] = int(line.strip().split()[0])
-            if "Length distribution of reads after trimming:" in line:
+            elif "Length distribution of reads after trimming:" in line:
                 self.adaptor_stats['post_trimming_lengths'] = {}
                 line = trimming_log.next()
                 while True:
@@ -358,10 +362,16 @@ class single_lib_qc():
                         uniqueness = 'multiple mapping'
                     else:
                         uniqueness = 'unique mapping'
-                    if not alignment.is_reverse:  # alignment on + strand
-                        strand = '+'
-                    else:  # alignment on - strand
-                        strand = '-'
+                    if not self.parent_qc.experiment_settings.get_property('reads_reversed'):#for example, Illumina Truseq
+                        if not alignment.is_reverse:  # alignment on + strand
+                            strand = '+'
+                        else:  # alignment on - strand
+                            strand = '-'
+                    else:
+                        if alignment.is_reverse:  # alignment on + strand
+                            strand = '+'
+                        else:  # alignment on - strand
+                            strand = '-'
                     annotation_entry = self.parent_qc.full_QC_GTF_annotations.find_smallest_annotation_at_position(chromosome, strand, alignment.reference_start, alignment.reference_end)
                     if annotation_entry is None:
                         self.annotation_mapping_counts[uniqueness]['not annotated']+=1
