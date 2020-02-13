@@ -474,21 +474,33 @@ class transcript:
         return sum([read_dict[position] for position in read_dict
                     if position>=start_offset and position<=self.tx_length+stop_offset])
 
-    def get_read_frame_counts(self, start, end, read_end='5p', read_lengths='all'):
+    def get_read_frame_counts(self, start, end, read_end='5p', read_lengths='all', p_site_offsets = None):
         '''
         :return the number of reads in each CDS frame. the first nucleotide of the  start codon is frame zero.
         :param start: tx position (zero-indexed, inclusive) to start counting at
         :param stop: tx position (zero-indexed, inclusive) to stop counting at
         :param read_end: '5p' or 3p', which end of reads to count.
         :param read_lengths: read lengths to include in the count. must be 'all', or an array of ints.
+        :param p_site_offsets: dictionary of {length:offset} for each fragment length. this will override read_lengths, and offset the reads before counting frame
+                for example, a usual 5p p_site_offset for 28/29 nt footprints is -12, since this is the position of the read 5' end peak at start codons
         :return:
         '''
-        read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
-        frame_counts = np.zeros(3)
-        for position in range(start, end+1):
-            if position >= 0 and position <= self.tx_length and position in read_dict:
-                cds_rel_position = position - self.cds_start
-                frame_counts[cds_rel_position%3] += read_dict[position]
+
+        if p_site_offsets == None:
+            read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=read_lengths)
+            frame_counts = np.zeros(3)
+            for position in range(start, end+1):
+                if position >= 0 and position <= self.tx_length and position in read_dict:
+                    cds_rel_position = position - self.cds_start
+                    frame_counts[cds_rel_position%3] += read_dict[position]
+        else:
+            frame_counts = np.zeros(3)
+            for read_length in p_site_offsets:
+                read_dict = self.get_read_end_positions(read_end=read_end, read_lengths=[read_length])
+                for position in range(start + p_site_offsets[read_length], end  +p_site_offsets[read_length] + 1):
+                    if position >= 0 and position <= self.tx_length and position in read_dict:
+                        cds_rel_position = position - self.cds_start
+                        frame_counts[cds_rel_position % 3] += read_dict[position]
 
         return frame_counts
 
