@@ -30,7 +30,7 @@ This will run the basic read trimming and mapping
 
 #### Dependencies
 *   skewer read adaptor trimmer downloaded and added to path (https://github.com/relipmoc/skewer) (0.2.2 tested)
-*   STAR RNA-seq aligner downlaoded and added to path (tested versionSTAR 020201)
+*   STAR RNA-seq aligner downloaded and added to path (tested versionSTAR 020201)
 *   samtools (http://www.htslib.org/ version 1.5 tested) compiled and added to path (make install may do this automatically)
 *   FASTX-toolkit (http://hannonlab.cshl.edu/fastx_toolkit/) tested with 0.0.14
 *   seqtk (https://github.com/lh3/seqtk)
