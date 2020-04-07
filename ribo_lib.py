@@ -574,16 +574,16 @@ class transcript:
     def second_stop_position(self):
         #find the position of the first nt of the first in-frame stop after the canonical stop codon,
         # relative to the start of the tx
-        stop_codon = self.full_sequence[self.cds_end-3: self.cds_end].upper()
+        stop_codon = self.full_sequence[self.cds_end-2: self.cds_end+1].upper()
         if ribo_utils.GENETIC_CODE[stop_codon] == '_':
-            for position in range(self.cds_end, self.tx_length, 3):
+            for position in range(self.cds_end+1, self.tx_length, 3):
                 codon = self.full_sequence[position: position+3].upper()
                 if codon in ribo_utils.GENETIC_CODE and ribo_utils.GENETIC_CODE[codon] == '_':
                     return position
         else:
             pass
 
-            print 'first stop is weird', self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
+            print 'first stop is weird', self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-2: self.cds_end+1]
         return None
 
     def second_stop_codon(self):
@@ -605,27 +605,33 @@ class transcript:
 
 
 
-    def compute_readthrough_ratio(self, p_offset, read_end='5p', read_lengths='all', cds_cutoff=128, log=True,
-                                  post_cds_start_buffer=12, pre_cds_stop_buffer = 15, pre_extension_stop_buffer=15,
-                                  post_cds_stop_buffer=9):
+    def compute_readthrough_ratio(self, a_site_offsets, min_tx_counts=128, post_cds_start_nt=18, pre_cds_stop_nt = 15,
+                                  post_extension_start_nt=6, pre_extension_stop_nt=0, min_extension_nt=15):
+
         """
 
-        :param p_offset: distance of p-site from designated read end, positive for 5p, negative for 3p
-        :param read_end:
-        :param read_lengths:
-        :param cds_cutoff:
-        :param log:
-        :param post_cds_start_buffer: omit this many nucleotides at edge from counting
-        :param pre_cds_stop_buffer: omit this many nucleotides at edge from counting
-        :param pre_extension_stop_buffer: omit this many nucleotides at edge from counting
-        :param post_cds_stop_buffer: omit this many nucleotides at edge from counting
+        :param a_site_offsets: dictionary mapping read length to distance of 5' ends of read from A site, should be negative.
+        :param min_tx_counts: minimum number of reads for a transcript to be counted
+        :param post_cds_start_nt: omit this many nucleotides 3' of CDS start from counting
+        :param pre_cds_stop_nt: omit this many nucleotides 5' of CDS end from counting
+        :param post_extension_start_nt: omit this many nucleotides 3' of extension start from counting
+        :param pre_extension_stop_nt: omit this many nucleotides 3' of extension end from counting
+        :param min_extension_nt: minimum length of extension in nt for counting
         :return:
         """
         if self.is_coding:
-            cds_counts = self.get_cds_read_count(post_cds_start_buffer-p_offset, (-1*pre_cds_stop_buffer)-p_offset, read_end=read_end,
-                                                       read_lengths=read_lengths)
-            cds_read_density =  cds_counts/float(self.cds_length)
+            a_site_positions = self.get_a_site_positions(a_site_offsets)
+            total_tx_counts = sum(a_site_positions.values())
+
+            cds_counts = sum([a_site_positions[position] for position in range(self.cds_start+post_cds_start_nt,
+                                                                               1+self.cds_end-pre_cds_stop_nt)])
+            adjusted_cds_length = self.cds_length - (post_cds_start_nt + pre_cds_stop_nt)
+            cds_read_density =  cds_counts/float(adjusted_cds_length)
+
             second_stop = self.second_stop_position()
+
+
+
             if not second_stop == None and cds_counts>=cds_cutoff:
                 ex_length = self.readthrough_extension_length(pre_extension_stop_buffer=pre_extension_stop_buffer,
                                                   post_cds_stop_buffer=post_cds_stop_buffer)
