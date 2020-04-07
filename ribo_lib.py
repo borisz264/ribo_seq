@@ -144,14 +144,19 @@ class ribo_lib:
         return self.get_cds_rpm(tx_id, start_offset, stop_offset, read_end=read_end, read_lengths=read_lengths) / \
                (self.transcripts[tx_id].cds_length-start_offset+stop_offset)
 
-    def get_read_counts_at_genomic_interval(self, chromosome, start, end, strand, allow_multimapping=True, compute_fractional_coverage=False):
-        #start and end are inclusive
+    def get_read_counts_at_genomic_interval(self, chromosome, start, end, strand, allow_multimapping=True,
+                                            compute_fractional_coverage=False,
+                                            a_site_offsets=None):
+        # param a_site_offsets: example: {28:-15, 29:-15, 30:-16} locations of A site relative to read 5p end (zero indexed)
+        # param compute_fractional_coverage: if True, read counts will be evenly across all positions overlapped by a read
+        if a_site_offsets is not None and compute_fractional_coverage:
+            print("offsets are not applied to fractional coverage, but read lengths will be filtered")
 
+        # start and end are inclusive
         assert strand in ['+', '-']
         reads_reversed = self.experiment_settings.get_property('reads_reversed')
         sam_file = pysam.AlignmentFile(self.lib_settings.get_genome_mapped_reads(), "rb")
-        all_mapping_reads = sam_file.fetch(chromosome, start, end+1) #fetch is not inclusive on the right side
-
+        all_mapping_reads = sam_file.fetch(chromosome, start, end + 1)  # fetch is not inclusive on the right side
         if strand == '+':
             if reads_reversed:
                 want_reverse = True
@@ -169,49 +174,41 @@ class ribo_lib:
             multiplicity = int(read.get_tag('NH:i'))
             assert multiplicity > 0
             if not (allow_multimapping == False and multiplicity > 1):
-                #TODO: I'm not 100% sure the strand stuff is right. right now i think the reversed RNA-seq reads won't
-                # affect this as long as we know what strand they are one.
-                if strand == '+':
-                    fragment_start = read.reference_start  # 0-based start of fragment
-                    fragment_end = read.reference_end - 1
-                else:
-                    fragment_start = read.reference_end + 1
-                    fragment_end = read.reference_start
-
                 # get read length from sequence, or CIGAR string if unavailable
                 fragment_length = read.infer_query_length(always=False)
 
-                assert fragment_length != 0
+                assert fragment_length > 0
 
-                if read_lengths == 'all' or read_length in read_lengths:
-                    for i in range(read_length):
-                        read_dict[position+i] = read_dict[position+i] + 1./read_length
+                if a_site_offsets is None:
+                    if strand == '+':
+                        fragment_start = read.reference_start  # 0-based start of fragment
+                        fragment_end = read.reference_end - 1
+                    else:
+                        fragment_start = read.reference_end - 1
+                        fragment_end = read.reference_start
+                    if compute_fractional_coverage:
+                        for block in read.get_blocks():
+                            for i in range(block[0], block[1] + 1):
+                                positional_read_counts[i] = positional_read_counts[i] + 1. / fragment_length
+                    else:
+                        positional_read_counts[fragment_start] = positional_read_counts[fragment_start] + 1.
 
-                self.fragment_5p_ends_at_position[fragment_start] += 1
-                self.fragment_3p_ends_at_position[fragment_end] += 1
-                self.fragment_count += 1
-                self.length_dist[fragment_length] += 1
-                if fragment_length not in self.fragment_5p_lengths_at_position[fragment_start]:
-                    self.fragment_5p_lengths_at_position[fragment_start][fragment_length] = 0
-                self.fragment_5p_lengths_at_position[fragment_start][fragment_length] += 1
-                if fragment_length not in self.fragment_3p_lengths_at_position[fragment_end]:
-                    self.fragment_3p_lengths_at_position[fragment_end][fragment_length] = 0
-                self.fragment_3p_lengths_at_position[fragment_end][fragment_length] += 1
-
-                def get_a_site_positions(self, a_site_offsets):
-                    '''
-                    :param a_site_offsets: example: {28:-15, 29:-15, 30:-16} locations of A site relative to read 5p end (zero indexed)
-                    This offset be the location of the max start codon peak when these read lengths are aligned at the A of the start codon as zero
-                    :return:
-                    '''
-                    read_dict = {}
-                    super_dict = self.fragment_5p_lengths_at_position
-                    for position in super_dict.keys():
-                        read_dict[position] = sum(
-                            [super_dict[position + a_site_offsets[read_length]][read_length] for read_length in
-                             a_site_offsets
-                             if read_length in super_dict[position + a_site_offsets[read_length]]])
-                    return read_dict
+                elif fragment_length in a_site_offsets.keys():  # apply offsets
+                    if compute_fractional_coverage:
+                        for block in read.get_blocks():
+                            for i in range(block[0], block[1] + 1):
+                                positional_read_counts[i] = positional_read_counts[i] + 1. / fragment_length
+                    else:
+                        if strand == '+':
+                            fragment_start = read.reference_start  # 0-based start of fragment
+                            fragment_end = read.reference_end - 1
+                            a_site = fragment_start - a_site_offsets[fragment_length]
+                        else:
+                            fragment_start = read.reference_end - 1
+                            fragment_end = read.reference_start
+                            a_site = fragment_start + a_site_offsets[fragment_length]
+                        positional_read_counts[a_site] = positional_read_counts[a_site] + 1
+        return [positional_read_counts[position] for position in range(start, end + 1)]
 
 class transcript:
     """
@@ -586,7 +583,7 @@ class transcript:
         else:
             pass
 
-            #print 'first stop is weird', self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
+            print 'first stop is weird', self.gene_id, self.strand, self.cds_end, self.full_sequence[self.cds_end-3: self.cds_end]
         return None
 
     def second_stop_codon(self):
