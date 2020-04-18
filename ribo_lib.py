@@ -370,7 +370,9 @@ class transcript:
         '''
         read_dict = {}
         super_dict = self.fragment_5p_lengths_at_position
-        for position in super_dict.keys():
+        #TODO: figure out indexing (0 or 1, I think it's 1) and fix the below
+        # but I don't think it matters, as the  outliers should be zero
+        for position in range(0, self.tx_length+1):#i'm not 100% sure about whether this is zero or 1 indexed at the moment, but shouldn't matter this way
             read_dict[position] = sum(
                 [super_dict[position + a_site_offsets[read_length]][read_length] for read_length in a_site_offsets
                  if read_length in super_dict[position + a_site_offsets[read_length]]])
@@ -608,6 +610,7 @@ class transcript:
     def compute_readthrough_ratio(self, a_site_offsets, min_tx_counts=128, post_cds_start_nt=18, pre_cds_stop_nt = 15,
                                   post_extension_start_nt=6, pre_extension_stop_nt=0, min_extension_nt=15):
 
+        #TODO: totally busted, fix this.
         """
 
         :param a_site_offsets: dictionary mapping read length to distance of 5' ends of read from A site, should be negative.
@@ -651,7 +654,7 @@ class transcript:
         return None
 
     def relative_codon_positions(self, target_codon):
-        #return the positions of the given codon relative to CDS start
+        #return the positions of the given codon relative to transcript start
         assert target_codon in ribo_utils.GENETIC_CODE
         positions = []
         for codon_position in range(self.cds_start, self.cds_end, 3):
